@@ -22,6 +22,25 @@ type Context struct {
 	lock        sync.RWMutex
 }
 
+func (gs *GoSvelt) newContext() any {
+	return &Context{
+		gosvelt: gs,
+		Ctx:     context.Background(),
+		lock:    sync.RWMutex{},
+	}
+}
+
+func (c *Context) update(ctx *fasthttp.RequestCtx) {
+	c.Ctx = context.Background()
+	c.fasthttpCtx = ctx
+	c.store = make(Map)
+}
+
+func (c *Context) reset() {
+	c.fasthttpCtx = nil
+	c.store = nil
+}
+
 func (c *Context) Req() *fasthttp.Request {
 	return &c.fasthttpCtx.Request
 }
