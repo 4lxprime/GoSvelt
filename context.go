@@ -2,6 +2,7 @@ package gosvelt
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/proto"
 )
 
 type Context struct {
@@ -87,6 +90,8 @@ func (c *Context) CacheReset() {
 
 	c.store = make(Map)
 }
+
+// CONTEXT RESPONSES -->
 
 func (c *Context) Html(code int, t string, args ...any) error {
 	// check if it's a file or an string
@@ -202,6 +207,73 @@ func (c *Context) File(code int, file string, compress ...bool) error {
 	if s != fss || fss == 404 {
 		return fmt.Errorf("fileserver: file %s not found", file)
 	}
+
+	return nil
+}
+
+// return ws connection
+// NOTE: this need websocket.FastHTTPHandler handler
+// and all ws code will be in the arg handler
+func (c *Context) Ws(handler websocket.FastHTTPHandler) error {
+	upgrader := websocket.FastHTTPUpgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+
+	err := upgrader.Upgrade(c.fasthttpCtx, handler)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// return json datas to client
+func (c *Context) Json(code int, j interface{}) error {
+	c.SetCType(MAppJsonUTF8)
+
+	jsonData, err := json.Marshal(j)
+	if err != nil {
+		return err
+	}
+
+	c.SetStatusCode(code)
+	c.Write(jsonData)
+
+	return nil
+}
+
+// return proto datas to client
+func (c *Context) Proto(code int, p proto.Message) error {
+	c.SetCType(MOctStream)
+
+	dataBytes, err := proto.Marshal(p)
+	if err != nil {
+		return err
+	}
+
+	c.SetStatusCode(code)
+	c.Write(dataBytes)
+
+	return nil
+}
+
+// return text datas to client
+func (c *Context) Text(code int, t string) error {
+	c.SetCType(MTextPlainUTF8)
+
+	c.SetStatusCode(code)
+	c.Write([]byte(t))
+
+	return nil
+}
+
+// return bytes datas to client
+func (c *Context) Blob(code int, b []byte) error {
+	c.SetCType(MOctStream)
+
+	c.SetStatusCode(code)
+	c.Write(b)
 
 	return nil
 }

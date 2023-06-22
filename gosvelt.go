@@ -14,6 +14,35 @@ import (
 
 type Map map[string]interface{}
 
+const (
+	CharsetUTF8 = "charset=UTF-8"
+
+	// Methods
+	MGet     = http.MethodGet     // get
+	MPost    = http.MethodPost    // post
+	MPut     = http.MethodPut     // put
+	MDelete  = http.MethodDelete  // delete
+	MConnect = http.MethodConnect // connect
+	MOptions = http.MethodOptions // options
+
+	// Mime
+	MAppJSON       = "application/json"                  // json
+	MAppProto      = "application/protobuf"              // protobuf
+	MAppJS         = "application/javascript"            // js
+	MAppXML        = "application/xml"                   // xml
+	MAppForm       = "application/x-www-form-urlencoded" // form
+	MOctStream     = "application/octet-stream"          // octet stream
+	MTextPlain     = "text/plain"                        // text
+	MTextHTML      = "text/html"                         // html
+	MTextXML       = "text/xml"                          // xml text
+	MAppJsonUTF8   = MAppJSON + "; " + CharsetUTF8       // json utf8
+	MAppJsUTF8     = MAppJS + "; " + CharsetUTF8         // js utf8
+	MAppXmlUTF8    = MAppXML + "; " + CharsetUTF8        // xml utf8
+	MTextPlainUTF8 = MTextPlain + "; " + CharsetUTF8     // text utf8
+	MTextHtmlUTF8  = MTextHTML + "; " + CharsetUTF8      // html utf8
+	MTextXmlUTF8   = MTextXML + "; " + CharsetUTF8       // xml text utf8
+)
+
 type Config struct {
 	Http2 bool
 }
@@ -74,27 +103,31 @@ func (gs *GoSvelt) StartTLS(addr, cert, key string) {
 }
 
 func (gs *GoSvelt) Get(path string, h HandlerFunc) {
-	gs.add(http.MethodGet, path, h)
+	gs.add(MGet, path, h)
 }
 
 func (gs *GoSvelt) Post(path string, h HandlerFunc) {
-	gs.add(http.MethodPost, path, h)
+	gs.add(MPost, path, h)
 }
 
 func (gs *GoSvelt) Put(path string, h HandlerFunc) {
-	gs.add(http.MethodPut, path, h)
+	gs.add(MPut, path, h)
 }
 
 func (gs *GoSvelt) Delete(path string, h HandlerFunc) {
-	gs.add(http.MethodDelete, path, h)
+	gs.add(MDelete, path, h)
 }
 
 func (gs *GoSvelt) Connect(path string, h HandlerFunc) {
-	gs.add(http.MethodConnect, path, h)
+	gs.add(MConnect, path, h)
 }
 
 func (gs *GoSvelt) Options(path string, h HandlerFunc) {
-	gs.add(http.MethodOptions, path, h)
+	gs.add(MOptions, path, h)
+}
+
+func (gs *GoSvelt) Static(path, file string) {
+	gs.addStatic(MGet, path, newFileHandler(file))
 }
 
 // help to server Svelte files to client
@@ -122,18 +155,29 @@ func (gs *GoSvelt) addSvelte(path, file string, fh SvelteHandlerFunc, layouts ..
 		panic(err)
 	}
 
+	// this is for the // in start of path
+	var gpath string
+	if string(path[len(path)-1]) == "/" {
+		gpath = path[:len(path)-1]
+	}
+
 	// this map gives the js and css path
 	svelteMap := Map{
-		"js":  filepath.Join(path, "/bundle/bundle.js"),
-		"css": filepath.Join(path, "/bundle/bundle.css"),
+		"js":  gpath + "/bundle/bundle.js",
+		"css": gpath + "/bundle/bundle.css",
 	}
 
 	// this will handle the main route
-	gs.router.Handle(http.MethodGet, path, gs.newFrontHandler(fh, svelteMap))
+	gs.router.Handle(MGet, path, gs.newFrontHandler(fh, svelteMap))
+
 	// this will handle the js bundle file
-	gs.router.Handle(http.MethodGet, path+"/bundle/bundle.js", newFileHandler(svelteWorkdir+"/"+compName+"/bundle.js"))
+	gs.addStatic(MGet, gpath+"/bundle/bundle.js", newFileHandler(svelteWorkdir+"/"+compName+"/bundle.js"))
 	// this will handle the css bundle file
-	gs.router.Handle(http.MethodGet, path+"/bundle/bundle.css", newFileHandler(svelteWorkdir+"/"+compName+"/bundle.css"))
+	gs.addStatic(MGet, gpath+"/bundle/bundle.css", newFileHandler(svelteWorkdir+"/"+compName+"/bundle.css"))
+}
+
+func (gs *GoSvelt) addStatic(method, path string, h fasthttp.RequestHandler) {
+	gs.router.Handle(method, path, h)
 }
 
 // NOTE: this can be used in static handlers
