@@ -43,3 +43,9 @@ func main() {
 	gs.Start(":80")
 }
 ```
+## todo:
+### SSR:
+ - we want to add an integration of server prerendering, this aim to improve performance and add css engines
+### SSE:
+ - an Server-Sent Event support
+### Css engines like Tailwindcss
