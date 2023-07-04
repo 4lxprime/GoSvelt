@@ -83,6 +83,8 @@ func (gs *GoSvelt) Start(addr string) {
 		http2.ConfigureServer(gs.server, http2.ServerConfig{})
 	}
 
+	fmt.Printf("GoSvelt is started on [:%s]\n", addr)
+
 	err := gs.server.ListenAndServe(addr)
 	if err != nil {
 		panic(err)
@@ -131,15 +133,23 @@ func (gs *GoSvelt) Static(path, file string) {
 }
 
 // help to server Svelte files to client
-func (gs *GoSvelt) Svelte(path string, svelteFile string, fh SvelteHandlerFunc, layouts ...string) {
-	gs.addSvelte(path, svelteFile, fh, layouts...)
+func (gs *GoSvelt) Svelte(path string, svelteFile string, fh SvelteHandlerFunc, tailwind ...bool) {
+	var tw bool
+
+	if len(tailwind) != 0 {
+		tw = tailwind[0]
+	} else {
+		tw = false
+	}
+
+	gs.addSvelte(path, svelteFile, fh, tw)
 }
 
 func (gs *GoSvelt) add(method, path string, h HandlerFunc) {
 	gs.router.Handle(method, path, gs.newHandler(h))
 }
 
-func (gs *GoSvelt) addSvelte(path, file string, fh SvelteHandlerFunc, layouts ...string) {
+func (gs *GoSvelt) addSvelte(path, file string, fh SvelteHandlerFunc, tailwind bool) {
 
 	compName := fileName(file)
 
@@ -150,7 +160,7 @@ func (gs *GoSvelt) addSvelte(path, file string, fh SvelteHandlerFunc, layouts ..
 		}
 	}
 
-	err := compileSvelteFile(file, filepath.Join(svelteWorkdir, "/", compName, "/bundle"), layouts...)
+	err := compileSvelteFile(file, filepath.Join(svelteWorkdir, "/", compName, "/bundle"), tailwind)
 	if err != nil {
 		panic(err)
 	}

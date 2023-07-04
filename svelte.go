@@ -25,6 +25,9 @@ var (
 	errNoDefaultApp           = fmt.Errorf("svelte: no default app found (%s)", svelteApp)
 	errLayoutsCannotBeApp     = fmt.Errorf("svelte: layouts cannot be %s", svelteApp)
 	errNpxRollupCompile       = fmt.Errorf("svelte: cannot compile %s", svelteEnv)
+	errCustomTailwind         = fmt.Errorf("svelte: cannot write custom tailwindcss config in %s", svelteEnv+"/postcss.config.js")
+	errCustomPostcss          = fmt.Errorf("svelte: cannot write custom postcss config in %s", svelteEnv+"/tailwind.config.js")
+	errTailwinsBuild          = fmt.Errorf("svelte: there are an error during the tailwindcss compilation with postcss")
 )
 
 // this build the .svelte_env file with npm
@@ -92,7 +95,7 @@ func newSvelteEnv() error {
 // NOTE: in outFile, don't give an file ext like .js
 // NOTE: theses functions can be slower because
 // they do not affect requests handling
-func compileSvelteFile(inFile, outFile string, layouts ...string) error {
+func compileSvelteFile(inFile, outFile string, tailwind bool) error {
 	// check is svelte_env exist
 	if _, err := os.Stat(svelteEnv); os.IsNotExist(err) {
 		if err := newSvelteEnv(); err != nil {
@@ -135,26 +138,51 @@ func compileSvelteFile(inFile, outFile string, layouts ...string) error {
 	}
 
 	// move layouts to ./.svelte_env/src/
-	if len(layouts) != 0 {
-		for _, layout := range layouts {
-			lsName := file(layout)
+	// if len(layouts) != 0 {
+	// 	for _, layout := range layouts {
+	// 		lsName := file(layout)
 
-			if lsName == svelteApp {
-				return errLayoutsCannotBeApp
-			}
+	// 		if lsName == svelteApp {
+	// 			return errLayoutsCannotBeApp
+	// 		}
 
-			err = copyFile(layout, filepath.Join(svelteEnv, "/src/", lsName))
-			if err != nil {
-				return err
-			}
-		}
-	}
+	// 		err = copyFile(layout, filepath.Join(svelteEnv, "/src/", lsName))
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
 
 	// compile env with rollup command
 	cmd := exec.Command("npx", "rollup", "-c")
 	cmd.Dir = svelteEnv
 	if err := cmd.Run(); err != nil {
 		return errNpxRollupCompile
+	}
+
+	// compile tailwindcss
+	if tailwind {
+		cmd := exec.Command("npm", "install", "-g", "tailwindcss", "postcss", "postcss-cli")
+		cmd.Dir = svelteEnv
+		if err := cmd.Run(); err != nil {
+			return errNpmI
+		}
+
+		err := ioutil.WriteFile(svelteEnv+"/tailwind.config.js", []byte(`module.exports = {purge: ["./**/*.svelte", "./**/*.html"], theme: {extend: {}}, variants: {}, plugins: []}`), 0644)
+		if err != nil {
+			return errCustomTailwind
+		}
+
+		err = ioutil.WriteFile(svelteEnv+"/postcss.config.cjs", []byte(`module.exports = {plugins: [require("tailwindcss"), require("autoprefixer")]}`), 0644)
+		if err != nil {
+			return errCustomPostcss
+		}
+
+		cmd = exec.Command("npx", "postcss", "public/build/bundle.css", "-o", "public/build/bundle.css")
+		cmd.Dir = svelteEnv
+		if err = cmd.Run(); err != nil {
+			return errTailwinsBuild
+		}
 	}
 
 	// move js bundle file to outFile
