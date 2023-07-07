@@ -1,5 +1,5 @@
 # GoSvelt
- the `fasthttp` `fullstack` golang framwork using `svelt`.
+ the `fasthttp` `fullstack` golang framwork using `svelt` (support tailwindcss).
 
 ## why gosvelt ?
 ### fullstack integration of svelte
