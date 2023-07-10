@@ -13,5 +13,7 @@ var defaultErrorHandler = func(c *fasthttp.RequestCtx, err error) {
 }
 
 type HandlerFunc func(c *Context) error
+type MiddlewareFunc func(next HandlerFunc) HandlerFunc
+type SvelteMiddlewareFunc func(next SvelteHandlerFunc) SvelteHandlerFunc
 type SvelteHandlerFunc func(c *Context, svelte Map) error
 type ErrorHandlerFunc func(c *fasthttp.RequestCtx, err error)

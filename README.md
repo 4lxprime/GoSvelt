@@ -1,5 +1,5 @@
 # GoSvelt
- the `fasthttp` `fullstack` golang framwork using `svelt` (support tailwindcss).
+ the `fasthttp` `fullstack` golang framwork using `svelte` (support tailwindcss).
 
 ## why gosvelt ?
 ### fullstack integration of svelte
@@ -9,11 +9,15 @@ func main() {
 
     // here this handler will compile svelte code with related files
     // and will return the compiled page with html file
-	gs.Svelte("/", "./cmd/static/App.svelte", func(c *gosvelt.Context, svelte gosvelt.Map) error {
+	gs.Svelte("/", "./static/App.svelte", func(c *gosvelt.Context, svelte gosvelt.Map) error {
         // here you can also write plain html 
         // and give custom arguments instead of "svelte"
-		return c.Html(200, "./cmd/static/index.html", svelte)
-	})
+		return c.Html(200, "./static/index.html", svelte)
+	}, true) // true is for tailwindcss
+
+	gs.AdvancedSvelte("/adv", "./static/", "App.svelte", func(c *gosvelt.Context, svelte gosvelt.Map) error {
+		return c.Html(200, "./static/index.html", svelte)
+	}, true)
 
 	gs.Start(":80")
 }
@@ -44,8 +48,6 @@ func main() {
 }
 ```
 ## todo:
-### SSR:
- - we want to add an integration of server prerendering, this aim to improve performance and add css engines
-### SSE:
- - an Server-Sent Event support
-### Css engines like Tailwindcss
+ - [ ] SSR
+ - [ ] SSE
+ - [x] CSS Engines like Tailwindcss

@@ -2,10 +2,12 @@ package gosvelt
 
 import (
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
-	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/buaazp/fasthttprouter"
 	"github.com/dgrr/http2"
@@ -48,20 +50,23 @@ type Config struct {
 }
 
 type GoSvelt struct {
-	Config     *Config
-	server     *fasthttp.Server
-	router     *fasthttprouter.Router
-	pool       sync.Pool
-	errHandler ErrorHandlerFunc
+	Config            *Config
+	server            *fasthttp.Server
+	router            *fasthttprouter.Router
+	pool              sync.Pool
+	middlewares       map[string]MiddlewareFunc
+	svelteMiddlewares map[string]SvelteMiddlewareFunc
+	errHandler        ErrorHandlerFunc
 }
 
 func New(cfg ...*Config) *GoSvelt {
 	gs := &GoSvelt{
-		Config:     &Config{},
-		server:     &fasthttp.Server{},
-		router:     fasthttprouter.New(),
-		pool:       sync.Pool{},
-		errHandler: defaultErrorHandler,
+		Config:      &Config{},
+		server:      &fasthttp.Server{},
+		router:      fasthttprouter.New(),
+		pool:        sync.Pool{},
+		middlewares: make(map[string]MiddlewareFunc),
+		errHandler:  defaultErrorHandler,
 	}
 
 	if len(cfg) != 0 {
@@ -104,6 +109,14 @@ func (gs *GoSvelt) StartTLS(addr, cert, key string) {
 	}
 }
 
+func (gs *GoSvelt) Middleware(path string, fn MiddlewareFunc) {
+	gs.middlewares[path] = fn
+}
+
+func (gs *GoSvelt) SvelteMiddleware(path string, fn SvelteMiddlewareFunc) {
+	gs.svelteMiddlewares[path] = fn
+}
+
 func (gs *GoSvelt) Get(path string, h HandlerFunc) {
 	gs.add(MGet, path, h)
 }
@@ -133,7 +146,7 @@ func (gs *GoSvelt) Static(path, file string) {
 }
 
 // help to server Svelte files to client
-func (gs *GoSvelt) Svelte(path string, svelteFile string, fh SvelteHandlerFunc, tailwind ...bool) {
+func (gs *GoSvelt) Svelte(path, svelteFile string, fn SvelteHandlerFunc, tailwind ...bool) {
 	var tw bool
 
 	if len(tailwind) != 0 {
@@ -142,33 +155,66 @@ func (gs *GoSvelt) Svelte(path string, svelteFile string, fh SvelteHandlerFunc, 
 		tw = false
 	}
 
-	gs.addSvelte(path, svelteFile, fh, tw)
+	gs.addSvelte(path, svelteFile, "", fn, tw)
+}
+
+// help to server Svelte files to client
+func (gs *GoSvelt) AdvancedSvelte(path, svelteRoot, svelteFile string, fn SvelteHandlerFunc, tailwind ...bool) {
+	if svelteFile == "" {
+		panic(fmt.Errorf("file cannnot be empty"))
+	}
+
+	var tw bool
+	if len(tailwind) != 0 {
+		tw = tailwind[0]
+
+	} else {
+		tw = false
+	}
+
+	gs.addSvelte(path, svelteRoot, svelteFile, fn, tw)
 }
 
 func (gs *GoSvelt) add(method, path string, h HandlerFunc) {
 	gs.router.Handle(method, path, gs.newHandler(h))
 }
 
-func (gs *GoSvelt) addSvelte(path, file string, fh SvelteHandlerFunc, tailwind bool) {
+func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, tailwind bool) {
+	rand.Seed(time.Now().UnixNano())
 
-	compName := fileName(file)
+	// component name generated at random
+	compName := strings.ToLower(fmt.Sprintf("%x", rand.Uint32()))
+	for len(compName) < 8 {
+		compName += strings.ToLower(fmt.Sprintf("%x", rand.Uint32()))
+	}
 
-	if _, err := os.Stat(filepath.Join(svelteWorkdir, "/", compName)); os.IsNotExist(err) {
-		err := os.MkdirAll(filepath.Join(svelteWorkdir, "/", compName), 0755)
+	// component folder path
+	compFolder := svelteWorkdir + "/" + compName
+	// component file path without ext
+	compFile := svelteWorkdir + "/" + compName + "/bundle"
+
+	// create component folder is not exist
+	if _, err := os.Stat(compFolder); os.IsNotExist(err) {
+		err := os.MkdirAll(compFolder, 0755)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	err := compileSvelteFile(file, filepath.Join(svelteWorkdir, "/", compName, "/bundle"), tailwind)
+	// compile svelte file to compFile
+	err := compileSvelteFile(file, compFile, root, tailwind)
 	if err != nil {
 		panic(err)
 	}
 
 	// this is for the // in start of path
+	// gpath is the good path
 	var gpath string
 	if string(path[len(path)-1]) == "/" {
 		gpath = path[:len(path)-1]
+
+	} else {
+		gpath = path
 	}
 
 	// this map gives the js and css path
@@ -181,9 +227,9 @@ func (gs *GoSvelt) addSvelte(path, file string, fh SvelteHandlerFunc, tailwind b
 	gs.router.Handle(MGet, path, gs.newFrontHandler(fh, svelteMap))
 
 	// this will handle the js bundle file
-	gs.addStatic(MGet, gpath+"/bundle/bundle.js", newFileHandler(svelteWorkdir+"/"+compName+"/bundle.js"))
+	gs.addStatic(MGet, svelteMap["js"].(string), newFileHandler(compFile+".js"))
 	// this will handle the css bundle file
-	gs.addStatic(MGet, gpath+"/bundle/bundle.css", newFileHandler(svelteWorkdir+"/"+compName+"/bundle.css"))
+	gs.addStatic(MGet, svelteMap["css"].(string), newFileHandler(compFile+".css"))
 }
 
 func (gs *GoSvelt) addStatic(method, path string, h fasthttp.RequestHandler) {
@@ -205,6 +251,15 @@ func (gs *GoSvelt) newFrontHandler(h SvelteHandlerFunc, svelte Map) fasthttp.Req
 		// using fasthttp request context
 		ctx := gs.pool.Get().(*Context)
 		ctx.update(bctx)
+
+		// middlewares
+		if len(gs.middlewares) != 0 {
+			for p, mid := range gs.svelteMiddlewares {
+				if p == ctx.Path() {
+					mid(h)
+				}
+			}
+		}
 
 		// if there are no errors handle the req
 		// else use the default error handler
@@ -228,6 +283,15 @@ func (gs *GoSvelt) newHandler(h HandlerFunc) fasthttp.RequestHandler {
 		// using fasthttp request context
 		ctx := gs.pool.Get().(*Context)
 		ctx.update(bctx)
+
+		// middlewares
+		if len(gs.middlewares) != 0 {
+			for p, mid := range gs.middlewares {
+				if p == ctx.Path() {
+					mid(h)
+				}
+			}
+		}
 
 		// if there are no errors handle the req
 		// else use the default error handler

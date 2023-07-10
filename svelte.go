@@ -6,7 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
+
+	"github.com/go-git/go-git/v5"
 )
 
 const (
@@ -17,21 +20,20 @@ const (
 
 var (
 	errNpxNotFound            = fmt.Errorf("svelte: npx is not available on your system, please install it")
-	errNpmDegit               = fmt.Errorf("svelte: npm cannot install degit on your system")
-	errNpmRollup              = fmt.Errorf("svelte: npm cannot install rollup on your system")
-	errNpmDegitSvelteTemplate = fmt.Errorf("svelte: npm cannot create degit svelte template on your system")
-	errNpmI                   = fmt.Errorf("svelte: npm cannot install needed dependencies on your system")
+	errNpmDegit               = fmt.Errorf("svelte: npm cannot install degit on your system, if you are on linux, may you can try to install it manually with 'sudo npm install -g degit' in the directory %s", svelteEnv)
+	errNpmRollup              = fmt.Errorf("svelte: npm cannot install rollup on your system, if you are on linux, may you can try to install it manually with 'sudo npm install -g rollup' in the directory %s", svelteEnv)
+	errNpmDegitSvelteTemplate = fmt.Errorf("svelte: npx degit cannot create degit svelte template on your system, you can try to install it manually with 'npx degit sveltejs/template .svelte_env'")
+	errNpmI                   = fmt.Errorf("svelte: npm cannot install needed dependencies on your system, if you are on linux, may you can try to install it manually with 'sudo npm i' in the directory %s", svelteEnv)
 	errCustomMainjs           = fmt.Errorf("svelte: cannot write custom app in %s", svelteEnv+"/src/main.js")
 	errNoDefaultApp           = fmt.Errorf("svelte: no default app found (%s)", svelteApp)
-	errLayoutsCannotBeApp     = fmt.Errorf("svelte: layouts cannot be %s", svelteApp)
-	errNpxRollupCompile       = fmt.Errorf("svelte: cannot compile %s", svelteEnv)
+	errNpxRollupCompile       = fmt.Errorf("svelte: cannot compile %s with rollup, you may have tried to use gs.Svelte('/path', '/your/app.svelte', ...) but it seems that app.svelte requires a parent file. To fix this, you can try using gs.AdvancedSvelte() instead", svelteEnv)
 	errCustomTailwind         = fmt.Errorf("svelte: cannot write custom tailwindcss config in %s", svelteEnv+"/postcss.config.js")
 	errCustomPostcss          = fmt.Errorf("svelte: cannot write custom postcss config in %s", svelteEnv+"/tailwind.config.js")
 	errTailwinsBuild          = fmt.Errorf("svelte: there are an error during the tailwindcss compilation with postcss")
 )
 
 // this build the .svelte_env file with npm
-// NOTE: this requiere node installed
+// NOTE: this requiere nodejs installed
 // NOTE: theses functions can be slower because
 // they do not affect requests handling
 func newSvelteEnv() error {
@@ -45,25 +47,58 @@ func newSvelteEnv() error {
 		if err != nil {
 			return err
 		}
-		// check is svelteWorkdir exist, else create it
-		if _, err := os.Stat(svelteWorkdir); os.IsNotExist(err) {
-			err := os.MkdirAll(svelteWorkdir, 0755)
-			if err != nil {
-				return err
-			}
-		}
-		_, err = exec.LookPath("npx")
+	}
+	// check is svelteWorkdir exist, else create it
+	if _, err := os.Stat(svelteWorkdir); os.IsNotExist(err) {
+		err := os.MkdirAll(svelteWorkdir, 0755)
 		if err != nil {
-			return errNpxNotFound
+			return err
+		}
+	}
+	_, err := exec.LookPath("npx")
+	if err != nil {
+		return errNpxNotFound
+	}
+
+	// idk how to check if an npm dep exist so
+	// i install dep before all launches
+	switch runtime.GOOS {
+	case "linux":
+		if err := exec.Command("sudo", "npm", "install", "-g", "rollup").Run(); err != nil {
+			return errNpmRollup
 		}
 
-		// idk how to check if an npm dep exist so
-		// i install dep before all launches
-		if err := exec.Command("npm", "install", "-g", "degit").Run(); err != nil {
+		if err := exec.Command("sudo", "npm", "install", "-g", "degit").Run(); err != nil {
 			return errNpmDegit
 		}
+
+		//cmd := exec.Command("sudo", "npx", "degit", "sveltejs/template", ".svelte_env")
+		//cmd.Dir = "./"
+		//if err := cmd.Run(); err != nil {
+		//	return errNpmDegitSvelteTemplate
+		//}
+
+		_, err := git.PlainClone(svelteEnv, false, &git.CloneOptions{
+			URL: "https://github.com/sveltejs/template",
+		})
+		if err != nil {
+			return fmt.Errorf("error during sveltejs/template clone (%s)", err)
+		}
+
+		cmd := exec.Command("sudo", "npm", "i")
+		cmd.Dir = svelteEnv
+		if err := cmd.Run(); err != nil {
+			return errNpmI
+		}
+
+	// windows and others
+	default:
 		if err := exec.Command("npm", "install", "-g", "rollup").Run(); err != nil {
 			return errNpmRollup
+		}
+
+		if err := exec.Command("npm", "install", "-g", "degit").Run(); err != nil {
+			return errNpmDegit
 		}
 
 		cmd := exec.Command("npx", "degit", "sveltejs/template", ".svelte_env")
@@ -77,12 +112,12 @@ func newSvelteEnv() error {
 		if err := cmd.Run(); err != nil {
 			return errNpmI
 		}
+	}
 
-		// custom app main.js
-		err = ioutil.WriteFile(svelteEnv+"/src/main.js", []byte("import App from './"+svelteApp+"'; export default new App({ target: document.body });"), 0644)
-		if err != nil {
-			return errCustomMainjs
-		}
+	// custom app main.js
+	err = ioutil.WriteFile(svelteEnv+"/src/main.js", []byte("import App from './"+svelteApp+"'; export default new App({ target: document.body });"), 0644)
+	if err != nil {
+		return errCustomMainjs
 	}
 
 	close(tempChan)
@@ -95,9 +130,15 @@ func newSvelteEnv() error {
 // NOTE: in outFile, don't give an file ext like .js
 // NOTE: theses functions can be slower because
 // they do not affect requests handling
-func compileSvelteFile(inFile, outFile string, tailwind bool) error {
+func compileSvelteFile(inFile, outFile, rootDir string, tailwind bool) error {
 	// check is svelte_env exist
+	// todo: check if file is empty
 	if _, err := os.Stat(svelteEnv); os.IsNotExist(err) {
+		if err := newSvelteEnv(); err != nil {
+			return err
+		}
+	}
+	if fs, err := os.ReadDir(svelteEnv); len(fs) == 0 || err != nil {
 		if err := newSvelteEnv(); err != nil {
 			return err
 		}
@@ -108,6 +149,12 @@ func compileSvelteFile(inFile, outFile string, tailwind bool) error {
 
 	go temporaryText(tempChan, tempMsg)
 
+	// no worries, in classic svelte handler,
+	// rootdir is equal to "",
+	// so its the same
+	oldFile := inFile
+	inFile = rootDir + inFile
+
 	isFile, err := isFile(inFile)
 	if err != nil {
 		return err
@@ -116,28 +163,40 @@ func compileSvelteFile(inFile, outFile string, tailwind bool) error {
 	// check if inFile is an svelte file or an directory
 	if isFile {
 		// move svelte root path inFile to env
-		if err := copyDir(filepath.Dir(inFile), filepath.Join(svelteEnv, "/src/")); err != nil {
+		// todo: add rootdir copy
+		if err := copyDir(filepath.Dir(rootDir), filepath.Join(svelteEnv, "/src/")); err != nil {
 			return err
 		}
 
 		// then if there are not App.svelte, rename inFile into App.svelte
 		if file(inFile) != svelteApp {
-			if err := copyFile(inFile, filepath.Join(svelteEnv, "/src/", svelteApp)); err != nil {
+			if err := copyFile(inFile, filepath.Join(svelteEnv, "/src/", filepath.Dir(oldFile), svelteApp)); err != nil {
 				return err
 			}
 		}
+
 	} else {
 		// move svelte root path inFile to env
-		if err := copyDir(inFile, filepath.Join(svelteEnv, "/src/")); err != nil {
+		// todo: add rootdir copy
+		if err := copyDir(rootDir, filepath.Join(svelteEnv, "/src/")); err != nil {
 			return err
 		}
 
-		if !exist(filepath.Join(svelteEnv, "/src/", svelteApp)) {
+		if !exist(filepath.Join(svelteEnv, "/src/", oldFile, svelteApp)) {
 			return errNoDefaultApp
 		}
 	}
 
-	// move layouts to ./.svelte_env/src/
+	// chmod folder if we run on a linux
+	if runtime.GOOS == "linux" {
+		cmd := exec.Command("sudo", "chmod", "-R", "777", svelteEnv)
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+
+	// idk if this is usefull
+	//// move layouts to ./.svelte_env/src/
 	// if len(layouts) != 0 {
 	// 	for _, layout := range layouts {
 	// 		lsName := file(layout)
@@ -153,6 +212,33 @@ func compileSvelteFile(inFile, outFile string, tailwind bool) error {
 	// 	}
 	// }
 
+	// custom app main.js that include custom rootDir
+	if rootDir != "" {
+		err = ioutil.WriteFile(svelteEnv+"/src/main.js", []byte("import App from './"+filepath.Join(filepath.Dir(oldFile), svelteApp)+"'; export default new App({ target: document.body });"), 0644)
+		if err != nil {
+			return errCustomMainjs
+		}
+	}
+
+	if tailwind {
+		// write configs
+		err := ioutil.WriteFile(svelteEnv+"/tailwind.config.js", []byte(`module.exports = {purge: ["./**/*.svelte", "./**/*.html"], theme: {extend: {}}, variants: {}, plugins: []}`), 0644)
+		if err != nil {
+			return errCustomTailwind
+		}
+		err = ioutil.WriteFile(svelteEnv+"/postcss.config.cjs", []byte(`module.exports = {plugins: [require("tailwindcss"), require("autoprefixer")]}`), 0644)
+		if err != nil {
+			return errCustomPostcss
+		}
+
+		// install needed deps for tailwindcss
+		cmd := exec.Command("npm", "install", "tailwindcss", "postcss", "postcss-cli", "autoprefixer")
+		cmd.Dir = svelteEnv
+		if err := cmd.Run(); err != nil {
+			return errNpmI
+		}
+	}
+
 	// compile env with rollup command
 	cmd := exec.Command("npx", "rollup", "-c")
 	cmd.Dir = svelteEnv
@@ -160,27 +246,12 @@ func compileSvelteFile(inFile, outFile string, tailwind bool) error {
 		return errNpxRollupCompile
 	}
 
-	// compile tailwindcss
 	if tailwind {
-		cmd := exec.Command("npm", "install", "-g", "tailwindcss", "postcss", "postcss-cli")
-		cmd.Dir = svelteEnv
-		if err := cmd.Run(); err != nil {
-			return errNpmI
-		}
-
-		err := ioutil.WriteFile(svelteEnv+"/tailwind.config.js", []byte(`module.exports = {purge: ["./**/*.svelte", "./**/*.html"], theme: {extend: {}}, variants: {}, plugins: []}`), 0644)
-		if err != nil {
-			return errCustomTailwind
-		}
-
-		err = ioutil.WriteFile(svelteEnv+"/postcss.config.cjs", []byte(`module.exports = {plugins: [require("tailwindcss"), require("autoprefixer")]}`), 0644)
-		if err != nil {
-			return errCustomPostcss
-		}
-
+		// build tailwindcss to our bundle
 		cmd = exec.Command("npx", "postcss", "public/build/bundle.css", "-o", "public/build/bundle.css")
 		cmd.Dir = svelteEnv
 		if err = cmd.Run(); err != nil {
+			fmt.Println(err)
 			return errTailwinsBuild
 		}
 	}
@@ -195,17 +266,19 @@ func compileSvelteFile(inFile, outFile string, tailwind bool) error {
 		return err
 	}
 
+	// clean ./.svelte_env/src/ directory
 	err = cleanDir(filepath.Join(svelteEnv, "/src/"))
 	if err != nil {
 		return err
 	}
 
-	// recreate src/main.js because of clean
+	// rewrite src/main.js because of dir clean
 	err = ioutil.WriteFile(svelteEnv+"/src/main.js", []byte("import App from './"+svelteApp+"'; export default new App({ target: document.body });"), 0644)
 	if err != nil {
 		return errCustomMainjs
 	}
 
+	// yeah i know, i slow the function for pretty text clean...
 	close(tempChan)
 	time.Sleep(100 * time.Millisecond)
 

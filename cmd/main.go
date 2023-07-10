@@ -8,6 +8,12 @@ import (
 func main() {
 	gs := gosvelt.New()
 
+	gs.Middleware("/", func(next gosvelt.HandlerFunc) gosvelt.HandlerFunc {
+		return func(c *gosvelt.Context) error {
+			return next(c)
+		}
+	})
+
 	gs.Get("/gg/:name", func(c *gosvelt.Context) error {
 		return c.Json(200, gosvelt.Map{"gg": c.Param("name")})
 	})
@@ -24,12 +30,9 @@ func main() {
 
 	gs.Static("/index", "./cmd/static/index.html")
 
-	gs.Svelte("/", "./cmd/static/App.svelte", func(c *gosvelt.Context, svelte gosvelt.Map) error {
-		// we can also do:
-		// return c.Html(200, "<!DOCTYPE html><html lang="en">...", svelte)
-		// but i prefer to do it with a file
+	gs.AdvancedSvelte("/advanced", "./cmd/static/", "app/App.svelte", func(c *gosvelt.Context, svelte gosvelt.Map) error {
 		return c.Html(200, "./cmd/static/index.html", svelte)
-	}, true) // true is for tailwindcss
+	}, true)
 
 	gs.Start(":8080")
 }

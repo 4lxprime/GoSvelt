@@ -1,5 +1,5 @@
 <script>
-    import Gosvelt from "gosvelt/gosvelt.svelte";
+    import Gosvelt from "../gosvelt/gosvelt.svelte";
 
     let name = "world";
 </script>

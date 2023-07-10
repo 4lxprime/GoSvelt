@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
+
+	cp "github.com/otiai10/copy"
 )
 
 // copy an file to another file
@@ -26,7 +27,7 @@ func copyFile(inFile, outFile string) error {
 
 	_, err = io.Copy(newFile, file)
 	if err != nil {
-		return fmt.Errorf("utils: cannot copy %s to %s", inFile, outFile)
+		return fmt.Errorf("utils: cannot copy %s to %s (%s)", inFile, outFile, err)
 	}
 
 	return nil
@@ -36,30 +37,17 @@ func copyFile(inFile, outFile string) error {
 //
 // CopyDir take an input dir and an output dir
 func copyDir(srcDir, destDir string) error {
-	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		destPath := filepath.Join(destDir, path[len(srcDir):])
-
-		if info.IsDir() {
-			err = os.MkdirAll(destPath, info.Mode())
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-
-		err = copyFile(path, destPath)
-		if err != nil {
-			return fmt.Errorf("utils: cannot copy dir %s to %s", srcDir, destDir)
-		}
-
-		return nil
+	err := cp.Copy(srcDir, destDir, cp.Options{
+		Skip: func(srcinfo os.FileInfo, src, dest string) (bool, error) {
+			// todo: add some suffix
+			return strings.HasSuffix(src, ".git"), nil
+		},
 	})
+	if err != nil {
+		return fmt.Errorf("utils: cannot copy dir %s to %s (%s)", srcDir, destDir, err)
+	}
 
-	return err
+	return nil
 }
 
 // this will clean an directory
