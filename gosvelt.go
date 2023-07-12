@@ -16,6 +16,18 @@ import (
 
 type Map map[string]interface{}
 
+func (m Map) Add(key string, value interface{}) {
+	m[key] = value
+}
+
+func (m Map) Del(key string) {
+	delete(m, key)
+}
+
+func (m Map) Get(key string) interface{} {
+	return m[key]
+}
+
 const (
 	CharsetUTF8 = "charset=UTF-8"
 
@@ -46,7 +58,8 @@ const (
 )
 
 type Config struct {
-	Http2 bool
+	Http2      bool
+	TypeScript bool
 }
 
 type GoSvelt struct {
@@ -54,6 +67,7 @@ type GoSvelt struct {
 	server            *fasthttp.Server
 	router            *fasthttprouter.Router
 	pool              sync.Pool
+	storePool         sync.Pool
 	middlewares       map[string]MiddlewareFunc
 	svelteMiddlewares map[string]SvelteMiddlewareFunc
 	errHandler        ErrorHandlerFunc
@@ -61,12 +75,14 @@ type GoSvelt struct {
 
 func New(cfg ...*Config) *GoSvelt {
 	gs := &GoSvelt{
-		Config:      &Config{},
-		server:      &fasthttp.Server{},
-		router:      fasthttprouter.New(),
-		pool:        sync.Pool{},
-		middlewares: make(map[string]MiddlewareFunc),
-		errHandler:  defaultErrorHandler,
+		Config:            &Config{},
+		server:            &fasthttp.Server{},
+		router:            fasthttprouter.New(),
+		pool:              sync.Pool{},
+		storePool:         sync.Pool{},
+		middlewares:       make(map[string]MiddlewareFunc),
+		svelteMiddlewares: make(map[string]SvelteMiddlewareFunc),
+		errHandler:        defaultErrorHandler,
 	}
 
 	if len(cfg) != 0 {
@@ -77,6 +93,7 @@ func New(cfg ...*Config) *GoSvelt {
 		gs.errHandler(ctx, fmt.Errorf("not found"))
 	}
 	gs.pool.New = gs.newContext
+	gs.storePool.New = func() interface{} { return make(Map) }
 
 	return gs
 }
@@ -88,10 +105,16 @@ func (gs *GoSvelt) Start(addr string) {
 		http2.ConfigureServer(gs.server, http2.ServerConfig{})
 	}
 
+	if _, err := os.Stat(svelteWorkdir); os.IsExist(err) {
+		err = cleanDir(svelteWorkdir)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	fmt.Printf("GoSvelt is started on [:%s]\n", addr)
 
-	err := gs.server.ListenAndServe(addr)
-	if err != nil {
+	if err := gs.server.ListenAndServe(addr); err != nil {
 		panic(err)
 	}
 }
@@ -103,8 +126,16 @@ func (gs *GoSvelt) StartTLS(addr, cert, key string) {
 		http2.ConfigureServer(gs.server, http2.ServerConfig{})
 	}
 
-	err := gs.server.ListenAndServeTLS(addr, cert, key)
-	if err != nil {
+	if _, err := os.Stat(svelteWorkdir); os.IsExist(err) {
+		err = cleanDir(svelteWorkdir)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	fmt.Printf("GoSvelt is started on [:%s]\n", addr)
+
+	if err := gs.server.ListenAndServeTLS(addr, cert, key); err != nil {
 		panic(err)
 	}
 }
@@ -142,7 +173,7 @@ func (gs *GoSvelt) Options(path string, h HandlerFunc) {
 }
 
 func (gs *GoSvelt) Static(path, file string) {
-	gs.addStatic(MGet, path, newFileHandler(file))
+	gs.addStatic(MGet, path, file)
 }
 
 // help to server Svelte files to client
@@ -202,7 +233,7 @@ func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, tail
 	}
 
 	// compile svelte file to compFile
-	err := compileSvelteFile(file, compFile, root, tailwind)
+	err := compileSvelteFile(file, compFile, root, tailwind, gs.Config.TypeScript)
 	if err != nil {
 		panic(err)
 	}
@@ -227,20 +258,13 @@ func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, tail
 	gs.router.Handle(MGet, path, gs.newFrontHandler(fh, svelteMap))
 
 	// this will handle the js bundle file
-	gs.addStatic(MGet, svelteMap["js"].(string), newFileHandler(compFile+".js"))
+	gs.addStatic(MGet, svelteMap["js"].(string), compFile+".js")
 	// this will handle the css bundle file
-	gs.addStatic(MGet, svelteMap["css"].(string), newFileHandler(compFile+".css"))
+	gs.addStatic(MGet, svelteMap["css"].(string), compFile+".css")
 }
 
-func (gs *GoSvelt) addStatic(method, path string, h fasthttp.RequestHandler) {
-	gs.router.Handle(method, path, h)
-}
-
-// NOTE: this can be used in static handlers
-func newFileHandler(path string) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		fasthttp.ServeFile(ctx, path)
-	}
+func (gs *GoSvelt) addStatic(method, path, file string) {
+	gs.router.Handle(method, path, func(ctx *fasthttp.RequestCtx) { ctx.SendFile(file) })
 }
 
 // this create an fasthttp handler
@@ -253,9 +277,9 @@ func (gs *GoSvelt) newFrontHandler(h SvelteHandlerFunc, svelte Map) fasthttp.Req
 		ctx.update(bctx)
 
 		// middlewares
-		if len(gs.middlewares) != 0 {
+		if len(gs.svelteMiddlewares) != 0 {
 			for p, mid := range gs.svelteMiddlewares {
-				if p == ctx.Path() {
+				if p == ctx.Path() || p == "*" {
 					mid(h)
 				}
 			}

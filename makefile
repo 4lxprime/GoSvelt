@@ -7,6 +7,7 @@ build-win:
 
 run: build
 	@./bin/app
+	rm -rf ./bun/app
 
 run-win: build
 	@./bin/app.exe

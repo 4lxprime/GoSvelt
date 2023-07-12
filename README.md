@@ -50,4 +50,4 @@ func main() {
 ## todo:
  - [ ] SSR
  - [ ] SSE
- - [x] CSS Engines like Tailwindcss
+ - [x] CSS Engine (Tailwindcss)

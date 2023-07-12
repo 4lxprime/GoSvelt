@@ -7,8 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,7 +65,7 @@ func (c *Context) Args() *fasthttp.Args {
 
 // CONTEXT STORE -->
 
-func (c *Context) Set(key, value string) {
+func (c *Context) CSet(key, value string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -74,21 +73,66 @@ func (c *Context) Set(key, value string) {
 		c.store = make(Map)
 	}
 
-	c.store[key] = value
+	if pool, ok := c.gosvelt.storePool.Get().(Map); ok {
+		pool[key] = value
+		c.store = pool
+
+	} else {
+		c.store[key] = value
+	}
 }
 
-func (c *Context) Get(key string) string {
+func (c *Context) CGet(key string) string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	return c.store[key].(string)
+	if c.store == nil {
+		return ""
+	}
+
+	if pool, ok := c.gosvelt.storePool.Get().(Map); ok {
+		value, ok := pool[key]
+		if ok {
+			return value.(string)
+		}
+
+		value = c.store[key]
+		pool[key] = value
+		c.store = pool
+
+		return value.(string)
+	}
+
+	if value, ok := c.store[key]; ok {
+		return value.(string)
+	}
+
+	return ""
 }
 
-func (c *Context) CacheReset() {
+func (c *Context) CDel(key string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.store == nil {
+		return
+	}
+
+	if pool, ok := c.gosvelt.storePool.Get().(Map); ok {
+		delete(pool, key)
+		c.store = pool
+
+	} else {
+		delete(c.store, key)
+	}
+}
+
+func (c *Context) CReset() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	c.store = make(Map)
+	c.gosvelt.storePool.Put(c.store)
 }
 
 // CONTEXT RESPONSES -->
@@ -115,46 +159,38 @@ func (c *Context) Html(code int, t string, args ...any) error {
 
 	switch args[0].(type) {
 	case string:
-		// find pattern &{x} and replace it with an given arg
-		// where x is an string
-		re := regexp.MustCompile(`&{(\d+)}`)
-		output = re.ReplaceAllStringFunc(t, func(match string) string {
-			digitStr := re.FindStringSubmatch(match)[1]
-			digit, _ := strconv.Atoi(digitStr)
+		// create a map of placeholders to values
+		placeholders := make(map[string]string)
+		for i, arg := range args[1:] {
+			placeholders[fmt.Sprintf("%d", i+1)] = fmt.Sprint(arg)
+		}
 
-			if digit >= 1 && digit <= len(args) {
-				// convert []any into []string
-				strArgs := make([]string, len(args))
-				for i, v := range args {
-					strArgs[i] = v.(string)
-				}
-				return strArgs[digit-1]
-			}
+		// replace placeholders in the template with values
+		for placeholder, value := range placeholders {
+			t = strings.ReplaceAll(t, fmt.Sprintf("&{%s}", placeholder), value)
+		}
 
-			return match
-		})
+		output = t
 
 	case Map:
-		// find pattern &{x} and replace it with an given arg
-		// where x is an string without ""
-		re := regexp.MustCompile(`&{(\w+)}`)
-		output = re.ReplaceAllStringFunc(t, func(match string) string {
-			key := re.FindStringSubmatch(match)[1]
+		// create a map of placeholders to values
+		placeholders := make(map[string]string)
+		for key, value := range args[0].(Map) {
+			placeholders[fmt.Sprintf("&{%s}", key)] = fmt.Sprint(value)
+		}
 
-			if value, ok := args[0].(Map)[key]; ok {
-				if strValue, ok := value.(string); ok {
-					return strValue
-				}
-			}
+		// replace placeholders in the template with values
+		for placeholder, value := range placeholders {
+			t = strings.ReplaceAll(t, placeholder, value)
+		}
 
-			return match
-		})
+		output = t
 
 	default:
-		return fmt.Errorf("args must be ...string or gosvelt.Map")
+		return fmt.Errorf("args must be...string or gosvelt.Map")
 	}
 
-	c.SetCType("text/html; charset=UTF-8")
+	c.SetCType(MTextHtmlUTF8)
 
 	c.SetStatusCode(code)
 	c.Write([]byte(output))
@@ -162,7 +198,6 @@ func (c *Context) Html(code int, t string, args ...any) error {
 	return nil
 }
 
-// todo: fix "Error occurred: not found" but it work
 func (c *Context) File(code int, file string, compress ...bool) error {
 	fs := &fasthttp.FS{
 		Root:               "",
@@ -312,7 +347,7 @@ func (c *Context) Secure() bool {
 
 // get the url params with key
 func (c *Context) Param(key string) string {
-	return fmt.Sprintf("%s", c.fasthttpCtx.UserValue(key)) // todo: remplace fasthttp context by something else
+	return fmt.Sprintf("%s", c.fasthttpCtx.UserValue(key))
 }
 
 // add an cookie
@@ -330,7 +365,7 @@ func (c *Context) SetCookie(k, v string, expire time.Time) {
 
 // write to client
 func (c *Context) Write(body []byte) {
-	c.fasthttpCtx.Write(body) // todo: remplace fasthttp context by something else
+	c.Res().AppendBody(body) // todo: remplace fasthttp context by something else
 }
 
 // set response header
@@ -340,10 +375,10 @@ func (c *Context) SetHeader(key, value string) {
 
 // set response status code in int
 func (c *Context) SetStatusCode(code int) {
-	c.Res().SetStatusCode(code)
+	c.Res().Header.SetStatusCode(code)
 }
 
 // set response content type
 func (c *Context) SetCType(ctype string) {
-	c.SetHeader("Content-Type", ctype)
+	c.Res().Header.Set("Content-Type", ctype)
 }
