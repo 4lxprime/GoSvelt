@@ -2,9 +2,11 @@ package gosvelt
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -58,8 +60,10 @@ const (
 )
 
 type Config struct {
-	Http2      bool
-	TypeScript bool
+	Http2          bool
+	TypeScript     bool
+	TailwindcssCfg string
+	PostcssCfg     string
 }
 
 type GoSvelt struct {
@@ -71,6 +75,44 @@ type GoSvelt struct {
 	middlewares       map[string]MiddlewareFunc
 	svelteMiddlewares map[string]SvelteMiddlewareFunc
 	errHandler        ErrorHandlerFunc
+}
+
+func (cfg *Config) init() *Config {
+	if len(cfg.PostcssCfg) != 0 {
+		if !(filepath.Ext(cfg.PostcssCfg) == "") {
+			file, err := os.Open(cfg.PostcssCfg)
+			if err != nil {
+				panic(err)
+			}
+			defer file.Close()
+
+			content, err := ioutil.ReadAll(file)
+			if err != nil {
+				panic(err)
+			}
+
+			cfg.PostcssCfg = string(content)
+		}
+	}
+
+	if len(cfg.TailwindcssCfg) != 0 {
+		if !(filepath.Ext(cfg.TailwindcssCfg) == "") {
+			file, err := os.Open(cfg.TailwindcssCfg)
+			if err != nil {
+				panic(err)
+			}
+			defer file.Close()
+
+			content, err := ioutil.ReadAll(file)
+			if err != nil {
+				panic(err)
+			}
+
+			cfg.TailwindcssCfg = string(content)
+		}
+	}
+
+	return cfg
 }
 
 func New(cfg ...*Config) *GoSvelt {
@@ -86,7 +128,7 @@ func New(cfg ...*Config) *GoSvelt {
 	}
 
 	if len(cfg) != 0 {
-		gs.Config = cfg[0]
+		gs.Config = cfg[0].init()
 	}
 
 	gs.router.NotFound = func(ctx *fasthttp.RequestCtx) {
@@ -233,7 +275,7 @@ func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, tail
 	}
 
 	// compile svelte file to compFile
-	err := compileSvelteFile(file, compFile, root, tailwind, gs.Config.TypeScript)
+	err := gs.compileSvelteFile(file, compFile, root, tailwind)
 	if err != nil {
 		panic(err)
 	}

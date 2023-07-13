@@ -35,7 +35,7 @@ var (
 // NOTE: this requiere nodejs installed
 // NOTE: theses functions can be slower because
 // they do not affect requests handling
-func newSvelteEnv(ts ...bool) error {
+func (gs *GoSvelt) newSvelteEnv() error {
 	tempMsg := "Svelte environment being created..."
 	tempChan := make(chan struct{})
 
@@ -61,15 +61,9 @@ func newSvelteEnv(ts ...bool) error {
 
 	var tscript bool
 	var url string
-	if len(ts) > 0 {
-		if ts[0] {
-			tscript = true
-			url = "https://github.com/4lxprime/svelteTsTemplate"
-
-		} else {
-			tscript = false
-			url = "https://github.com/4lxprime/svelteJsTemplate"
-		}
+	if gs.Config.TypeScript {
+		tscript = true
+		url = "https://github.com/4lxprime/svelteTsTemplate"
 
 	} else {
 		tscript = false
@@ -120,16 +114,16 @@ func newSvelteEnv(ts ...bool) error {
 // NOTE: in outFile, don't give an file ext like .js
 // NOTE: theses functions can be slower because
 // they do not affect requests handling
-func compileSvelteFile(inFile, outFile, rootDir string, tailwind, ts bool) error {
+func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind bool) error {
 	// check is svelte_env exist
 	// todo: check if file is empty
 	if _, err := os.Stat(svelteEnv); os.IsNotExist(err) {
-		if err := newSvelteEnv(ts); err != nil {
+		if err := gs.newSvelteEnv(); err != nil {
 			return err
 		}
 	}
 	if fs, err := os.ReadDir(svelteEnv); len(fs) == 0 || err != nil {
-		if err := newSvelteEnv(ts); err != nil {
+		if err := gs.newSvelteEnv(); err != nil {
 			return err
 		}
 	}
@@ -221,13 +215,27 @@ func compileSvelteFile(inFile, outFile, rootDir string, tailwind, ts bool) error
 
 	if tailwind {
 		// write configs
-		err := ioutil.WriteFile(svelteEnv+"/tailwind.config.js", []byte(`module.exports = {purge: ["./**/*.svelte", "./**/*.html"], theme: {extend: {}}, variants: {}, plugins: []}`), 0644)
-		if err != nil {
-			return errCustomTailwind
+		if len(gs.Config.TailwindcssCfg) == 0 {
+			err := ioutil.WriteFile(svelteEnv+"/tailwind.config.js", []byte(`module.exports = {purge: ["./**/*.svelte", "./**/*.html"], theme: {extend: {}}, variants: {}, plugins: []}`), 0644)
+			if err != nil {
+				return errCustomTailwind
+			}
+		} else {
+			err := ioutil.WriteFile(svelteEnv+"/tailwind.config.js", []byte(gs.Config.TailwindcssCfg), 0644)
+			if err != nil {
+				return errCustomTailwind
+			}
 		}
-		err = ioutil.WriteFile(svelteEnv+"/postcss.config.cjs", []byte(`module.exports = {plugins: [require("tailwindcss"), require("autoprefixer")]}`), 0644)
-		if err != nil {
-			return errCustomPostcss
+		if len(gs.Config.PostcssCfg) == 0 {
+			err = ioutil.WriteFile(svelteEnv+"/postcss.config.cjs", []byte(`module.exports = {plugins: [require("tailwindcss"), require("autoprefixer")]}`), 0644)
+			if err != nil {
+				return errCustomPostcss
+			}
+		} else {
+			err = ioutil.WriteFile(svelteEnv+"/postcss.config.cjs", []byte(gs.Config.PostcssCfg), 0644)
+			if err != nil {
+				return errCustomPostcss
+			}
 		}
 
 		// install needed deps for tailwindcss
