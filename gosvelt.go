@@ -81,34 +81,33 @@ func (cfg *Config) init() *Config {
 	if len(cfg.PostcssCfg) != 0 {
 		if !(filepath.Ext(cfg.PostcssCfg) == "") {
 			file, err := os.Open(cfg.PostcssCfg)
-			if err != nil {
-				panic(err)
-			}
-			defer file.Close()
+			if err == nil {
+				defer file.Close()
 
-			content, err := ioutil.ReadAll(file)
-			if err != nil {
-				panic(err)
-			}
+				content, err := ioutil.ReadAll(file)
+				if err != nil {
+					panic(err)
+				}
 
-			cfg.PostcssCfg = string(content)
+				cfg.PostcssCfg = string(content)
+
+			}
 		}
 	}
 
 	if len(cfg.TailwindcssCfg) != 0 {
 		if !(filepath.Ext(cfg.TailwindcssCfg) == "") {
 			file, err := os.Open(cfg.TailwindcssCfg)
-			if err != nil {
-				panic(err)
-			}
-			defer file.Close()
+			if err == nil {
+				defer file.Close()
 
-			content, err := ioutil.ReadAll(file)
-			if err != nil {
-				panic(err)
-			}
+				content, err := ioutil.ReadAll(file)
+				if err != nil {
+					panic(err)
+				}
 
-			cfg.TailwindcssCfg = string(content)
+				cfg.TailwindcssCfg = string(content)
+			}
 		}
 	}
 
