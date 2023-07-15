@@ -2,10 +2,13 @@ package gosvelt
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -246,6 +249,9 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind b
 		}
 	}
 
+	// parse and install all needed modules
+	moduleParser()
+
 	// compile env with rollup command
 	cmd := exec.Command("npx", "rollup", "-c")
 	cmd.Dir = svelteEnv
@@ -306,4 +312,70 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind b
 	time.Sleep(100 * time.Millisecond)
 
 	return nil
+}
+
+// this will parse a svelte file for found modules
+// NOTE: this remove svelte runtime modules
+func parseSvelte(data string) []string {
+	var mods []string
+
+	re := regexp.MustCompile(`import\s+(\w+)\s+from\s+['"](\w+)['"]`)
+	matches := re.FindAllStringSubmatch(data, -1)
+	for _, match := range matches {
+		mods = append(mods, match[2])
+	}
+
+	for i := len(mods) - 1; i >= 0; i-- {
+		mod := mods[i]
+		fmt.Println(mod)
+		if ext := filepath.Ext(mod); ext == ".svelte" {
+			mods = append(mods[:i], mods[i+1:]...)
+		}
+
+		// svelte runtime modules
+		lst := []string{"svelte", "svelte/store", "svelte/motion", "svelte/ttransition", "svelte/animate", "svelte/easing", "svelte/action"}
+		for l := len(lst) - 1; l >= 0; l-- {
+			if lst[l] == mod {
+				mods = append(mods[:i], mods[i+1:]...)
+			}
+		}
+	}
+
+	return mods
+}
+
+// this will found and parse all svelte files
+// for install needed modules
+// because rollup compillator cannot install
+// requiere module in svelte pages
+func moduleParser() {
+	filepath.Walk(filepath.Join(svelteEnv, "src"), func(path string, info fs.FileInfo, err error) error {
+		if ok, err := isFile(path); ok {
+			ext := filepath.Ext(path)
+			if ext == ".svelte" {
+				data, err := ioutil.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				mods := parseSvelte(string(data))
+				modules := strings.Join(mods, " ")
+
+				fmt.Println(modules)
+
+				cmd := exec.Command("npm", "i", modules)
+				cmd.Dir = svelteEnv
+				err = cmd.Run()
+				if err != nil {
+					return err
+				}
+			}
+
+		} else {
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		return nil
+	})
 }
