@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
 
 	let canvas;
 
@@ -44,7 +45,7 @@
 			<h1 class="text-xl text-white">GoSvelt</h1>
 		</div>
 	</header>
-	<canvas class="w-60" bind:this={canvas} width={32} height={32} />
+	<canvas transition:fly={{ y:200, duration: 800 }} class="w-60" bind:this={canvas} width={32} height={32} />
 </main>
 
 <style>

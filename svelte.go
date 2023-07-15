@@ -331,12 +331,11 @@ func parseSvelte(data string) []string {
 			mods = append(mods[:i], mods[i+1:]...)
 		}
 
-		// svelte runtime modules
-		lst := []string{"svelte", "svelte/store", "svelte/motion", "svelte/ttransition", "svelte/animate", "svelte/easing", "svelte/action"}
-		for l := len(lst) - 1; l >= 0; l-- {
-			if lst[l] == mod {
-				mods = append(mods[:i], mods[i+1:]...)
-			}
+		// if there are / in module
+		// this can be svelte/something
+		// or something else
+		if strings.Contains(mod, "/") {
+			mods = append(mods[:i], mods[i+1:]...)
 		}
 	}
 
