@@ -327,7 +327,6 @@ func parseSvelte(data string) []string {
 
 	for i := len(mods) - 1; i >= 0; i-- {
 		mod := mods[i]
-		fmt.Println(mod)
 		if ext := filepath.Ext(mod); ext == ".svelte" {
 			mods = append(mods[:i], mods[i+1:]...)
 		}
@@ -358,15 +357,15 @@ func moduleParser() {
 					return err
 				}
 				mods := parseSvelte(string(data))
-				modules := strings.Join(mods, " ")
+				if len(mods) != 0 {
+					modules := strings.Join(mods, " ")
 
-				fmt.Println(modules)
-
-				cmd := exec.Command("npm", "i", modules)
-				cmd.Dir = svelteEnv
-				err = cmd.Run()
-				if err != nil {
-					return err
+					cmd := exec.Command("npm", "i", modules)
+					cmd.Dir = svelteEnv
+					err = cmd.Run()
+					if err != nil {
+						return err
+					}
 				}
 			}
 
