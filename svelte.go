@@ -203,13 +203,13 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind b
 	if rootDir != "" {
 		// if typescript
 		if exist(svelteEnv + "/src/main.ts") {
-			err = ioutil.WriteFile(svelteEnv+"/src/main.ts", []byte("import App from './"+filepath.Join(filepath.Dir(oldFile), svelteApp)+"'; export default new App({ target: document.body });"), 0644)
+			err = ioutil.WriteFile(svelteEnv+"/src/main.ts", []byte("import App from './"+strings.ReplaceAll(filepath.Join(filepath.Dir(oldFile), svelteApp), `\`, "/")+"'; export default new App({ target: document.body });"), 0644)
 			if err != nil {
 				return errCustomMaints
 			}
 
 		} else {
-			err = ioutil.WriteFile(svelteEnv+"/src/main.js", []byte("import App from './"+filepath.Join(filepath.Dir(oldFile), svelteApp)+"'; export default new App({ target: document.body });"), 0644)
+			err = ioutil.WriteFile(svelteEnv+"/src/main.js", []byte("import App from './"+strings.ReplaceAll(filepath.Join(filepath.Dir(oldFile), svelteApp), `\`, "/")+"'; export default new App({ target: document.body });"), 0644)
 			if err != nil {
 				return errCustomMaints
 			}
