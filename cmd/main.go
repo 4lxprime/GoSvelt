@@ -32,7 +32,7 @@ func main() {
 
 	r.Static("/svelte_logo", "./cmd/static/svelte_logo.svg")
 
-	r.AdvancedSvelte("/", "./cmd/static/", "app/App.svelte", func(c *gs.Context, svelte gs.Map) error {
+	r.AdvancedSvelte("/", "cmd/static/", "app/App.svelte", func(c *gs.Context, svelte gs.Map) error {
 		return c.Html(200, "./cmd/static/index.html", svelte)
 	}, true)
 

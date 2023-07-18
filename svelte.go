@@ -140,7 +140,7 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind b
 	// rootdir is equal to "",
 	// so its the same
 	oldFile := inFile
-	inFile = rootDir + inFile
+	inFile = strings.ReplaceAll(filepath.Join(rootDir, inFile), `\`, "/") // fix the non-separated path
 
 	isFile, err := isFile(inFile)
 	if err != nil {
@@ -150,7 +150,7 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind b
 	// check if inFile is an svelte file or an directory
 	if isFile {
 		// move svelte root path inFile to env
-		// todo: add rootdir copy
+		// rootdir copy
 		if err := copyDir(filepath.Dir(rootDir), filepath.Join(svelteEnv, "/src/")); err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, tailwind b
 
 	} else {
 		// move svelte root path inFile to env
-		// todo: add rootdir copy
+		// rootdir copy
 		if err := copyDir(rootDir, filepath.Join(svelteEnv, "/src/")); err != nil {
 			return err
 		}

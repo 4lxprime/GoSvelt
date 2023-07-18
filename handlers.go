@@ -7,7 +7,7 @@ import (
 )
 
 var defaultErrorHandler = func(c *fasthttp.RequestCtx, err error) {
-	fmt.Printf("Error occurred: %v\n", err)
+	fmt.Printf("[%s] -> %v\n", c.Path(), err)
 
 	c.Write([]byte(err.Error()))
 }

@@ -60,6 +60,7 @@ const (
 )
 
 type Config struct {
+	Log            bool
 	Http2          bool
 	TypeScript     bool
 	TailwindcssCfg string
