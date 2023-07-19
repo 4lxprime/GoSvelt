@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/buaazp/fasthttprouter v0.1.1
 	github.com/dgrr/http2 v0.3.5
-	github.com/fasthttp/websocket v1.5.3
+	github.com/fasthttp/websocket v1.5.4
 	github.com/go-git/go-git/v5 v5.7.0
 	github.com/otiai10/copy v1.12.0
 	github.com/valyala/fasthttp v1.48.0
@@ -25,7 +25,7 @@ require (
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
-	github.com/klauspost/compress v1.16.5 // indirect
+	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/sergi/go-diff v1.1.0 // indirect
