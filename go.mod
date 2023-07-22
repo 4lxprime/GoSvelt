@@ -6,7 +6,7 @@ require (
 	github.com/buaazp/fasthttprouter v0.1.1
 	github.com/dgrr/http2 v0.3.5
 	github.com/fasthttp/websocket v1.5.4
-	github.com/go-git/go-git/v5 v5.7.0
+	github.com/go-git/go-git/v5 v5.8.0
 	github.com/otiai10/copy v1.12.0
 	github.com/valyala/fasthttp v1.48.0
 	google.golang.org/protobuf v1.31.0
