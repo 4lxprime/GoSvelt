@@ -1,6 +1,7 @@
 package gosvelt
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -62,7 +63,6 @@ const (
 type Config struct {
 	Log            bool
 	Http2          bool
-	TypeScript     bool
 	TailwindcssCfg string
 	PostcssCfg     string
 }
@@ -218,41 +218,95 @@ func (gs *GoSvelt) Static(path, file string) {
 	gs.addStatic(MGet, path, file)
 }
 
-// help to server Svelte files to client
-func (gs *GoSvelt) Svelte(path, svelteFile string, fn SvelteHandlerFunc, tailwind ...bool) {
-	var tw bool
+type SseConfig struct {
+	Datach    chan interface{} // needed
+	Closech   chan struct{}    // needed
+	EventName string           // optional
+	Timeout   time.Duration    // optional
+}
 
-	if len(tailwind) != 0 {
-		tw = tailwind[0]
-	} else {
-		tw = false
+func (gs *GoSvelt) Sse(path string, datach chan interface{}, closech chan struct{}, eventName string, fn func()) {
+	handler := func(c *fasthttp.RequestCtx) {
+		// cors headers
+		//c.Response.Header.Add("Access-Control-Allow-Origin", "*")
+		//c.Response.Header.Add("Access-Control-Allow-Headers", "Content-Type")
+		//c.Response.Header.Add("Access-Control-Allow-Credentials", "true")
+
+		// sse headers
+		c.Response.Header.Add("Content-Type", "text/event-stream")
+		c.Response.Header.Add("Transfer-Encoding", "chunked")
+		c.Response.Header.Add("Cache-Control", "no-cache")
+		c.Response.Header.Add("Connection", "keep-alive")
+
+		// write body stream
+		c.Response.SetBodyStream(
+			fasthttp.NewStreamReader(
+				func(w *bufio.Writer) {
+					flush := func() {
+						if err := w.Flush(); err != nil {
+							fmt.Printf("sse: flushing error: %v. closing http connection\n", err)
+							return
+						}
+					}
+
+					fmt.Printf("sse: write event %s\n", eventName)
+					fmt.Fprintf(w, "event: %s\n\n", eventName)
+					flush()
+
+				Loop:
+					for {
+						select {
+						case <-closech:
+							if datach != nil {
+								for range datach {
+								}
+								close(datach)
+							}
+
+							break Loop
+
+						case msg := <-datach:
+							switch m := msg.(type) {
+							case string:
+								fmt.Fprintf(w, "data: %s\n\n", m)
+
+							case any: // we don't care
+								fmt.Fprintf(w, "data: %s\n\n", m)
+							}
+
+							flush()
+						}
+					}
+				},
+			), -1,
+		)
+
+		// start user func
+		go fn()
 	}
 
-	gs.addSvelte(path, svelteFile, "", fn, tw)
+	gs.router.Handle(MGet, path, handler)
 }
 
 // help to server Svelte files to client
-func (gs *GoSvelt) AdvancedSvelte(path, svelteRoot, svelteFile string, fn SvelteHandlerFunc, tailwind ...bool) {
+func (gs *GoSvelt) Svelte(path, svelteFile string, fn SvelteHandlerFunc, cfg ...SvelteConfig) {
+	gs.addSvelte(path, svelteFile, "", fn, cfg...)
+}
+
+// help to server Svelte files to client
+func (gs *GoSvelt) AdvancedSvelte(path, svelteRoot, svelteFile string, fn SvelteHandlerFunc, cfg ...SvelteConfig) {
 	if svelteFile == "" {
 		panic(fmt.Errorf("file cannnot be empty"))
 	}
 
-	var tw bool
-	if len(tailwind) != 0 {
-		tw = tailwind[0]
-
-	} else {
-		tw = false
-	}
-
-	gs.addSvelte(path, svelteRoot, svelteFile, fn, tw)
+	gs.addSvelte(path, svelteRoot, svelteFile, fn, cfg...)
 }
 
 func (gs *GoSvelt) add(method, path string, h HandlerFunc) {
 	gs.router.Handle(method, path, gs.newHandler(h))
 }
 
-func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, tailwind bool) {
+func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, cfg ...SvelteConfig) {
 	rand.Seed(time.Now().UnixNano())
 
 	// component name generated at random
@@ -275,7 +329,7 @@ func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, tail
 	}
 
 	// compile svelte file to compFile
-	err := gs.compileSvelteFile(file, compFile, root, tailwind)
+	err := gs.compileSvelteFile(file, compFile, root, cfg...)
 	if err != nil {
 		panic(err)
 	}

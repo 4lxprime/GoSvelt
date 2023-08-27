@@ -5,6 +5,7 @@
 	let canvas;
 
 	onMount(() => {
+
 		const ctx = canvas.getContext('2d');
 		let frame;
 

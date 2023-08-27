@@ -1,6 +1,7 @@
 package gosvelt
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -246,6 +247,10 @@ func (c *Context) File(code int, file string, compress ...bool) error {
 	return nil
 }
 
+func (c *Context) GetForm(key string) []byte {
+	return c.fasthttpCtx.FormValue(key)
+}
+
 // return ws connection
 // NOTE: this need websocket.FastHTTPHandler handler
 // and all ws code will be in the arg handler
@@ -259,6 +264,74 @@ func (c *Context) Ws(handler websocket.FastHTTPHandler) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+type SseEvent struct {
+	Name string
+	Data string
+}
+
+type Sse struct {
+	events []*SseEvent
+}
+
+func (c *Context) Sse(datach chan interface{}, closech chan struct{}, fn func()) error {
+	// cors headers
+	//c.SetHeader("Access-Control-Allow-Origin", "*")
+	//c.SetHeader("Access-Control-Allow-Headers", "Content-Type")
+	//c.SetHeader("Access-Control-Allow-Credentials", "true")
+
+	// sse headers
+	c.SetHeader("Content-Type", "text/event-stream")
+	c.SetHeader("Transfer-Encoding", "chunked")
+	c.SetHeader("Cache-Control", "no-cache")
+	c.SetHeader("Connection", "keep-alive")
+
+	// write body stream
+	c.Res().SetBodyStream(
+		fasthttp.NewStreamReader(
+			func(w *bufio.Writer) {
+				flush := func() {
+					if err := w.Flush(); err != nil {
+						fmt.Printf("sse: flushing error: %v. closing http connection\n", err)
+						return
+					}
+				}
+
+				//Loop:
+				for {
+					select {
+					case <-closech:
+						close(datach)
+
+						//c.Res().Header.SetConnectionClose()
+
+						return
+
+					case msg := <-datach:
+						switch m := msg.(type) {
+						case string:
+							fmt.Fprintf(w, "data: %s\n\n", m)
+
+						case SseEvent:
+							fmt.Fprintf(w, "event: %s\n", m.Name)
+							fmt.Fprintf(w, "data: %s\n\n", m.Data)
+
+						default: // we don't care
+							fmt.Fprintf(w, "data: %s\n\n", m)
+						}
+
+						flush()
+					}
+				}
+			},
+		), -1,
+	)
+
+	// start user func
+	go fn()
 
 	return nil
 }
@@ -346,8 +419,8 @@ func (c *Context) Secure() bool {
 }
 
 // get the url params with key
-func (c *Context) Param(key string) string {
-	return fmt.Sprintf("%s", c.fasthttpCtx.UserValue(key))
+func (c *Context) Param(key interface{}) interface{} {
+	return c.fasthttpCtx.UserValue(key)
 }
 
 // add an cookie
