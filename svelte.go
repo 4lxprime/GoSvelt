@@ -370,7 +370,10 @@ func parseSvelte(data string) []string {
 		// this can be svelte/something
 		// or something else
 		if strings.Contains(mod, "/") {
-			mods = append(mods[:i], mods[i+1:]...)
+			if strings.Split(mod, "/")[0] == "svelte" {
+				// so just remove module
+				mods = append(mods[:i], mods[i+1:]...)
+			}
 		}
 	}
 
