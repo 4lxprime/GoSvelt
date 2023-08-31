@@ -28,7 +28,7 @@ func main() {
 }
 ```
 ### cool way to made sse
- there are actyally to way to use sse in gosvelt: the **context** way wich is in a context and can use channels declared in the handler. And the **handler** way wich is an handler function and use channels who are declared outside the handler.
+ there are actyally two way to use sse in gosvelt: the **context** way wich is in a context and can use channels declared in the handler. And the **handler** way wich is an handler function and use channels who are declared outside the handler.
 ```golang
 func main() {
 	r := gosvelt.New()
