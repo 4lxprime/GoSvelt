@@ -268,15 +268,6 @@ func (c *Context) Ws(handler websocket.FastHTTPHandler) error {
 	return nil
 }
 
-type SseEvent struct {
-	Name string
-	Data string
-}
-
-type Sse struct {
-	events []*SseEvent
-}
-
 func (c *Context) Sse(datach chan interface{}, closech chan struct{}, fn func()) error {
 	// cors headers
 	//c.SetHeader("Access-Control-Allow-Origin", "*")
@@ -316,7 +307,7 @@ func (c *Context) Sse(datach chan interface{}, closech chan struct{}, fn func())
 							fmt.Fprintf(w, "data: %s\n\n", m)
 
 						case SseEvent:
-							fmt.Fprintf(w, "event: %s\n", m.Name)
+							fmt.Fprintf(w, "event: %s\n\n", m.Name)
 							fmt.Fprintf(w, "data: %s\n\n", m.Data)
 
 						default: // we don't care

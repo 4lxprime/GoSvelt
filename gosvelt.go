@@ -218,14 +218,20 @@ func (gs *GoSvelt) Static(path, file string) {
 	gs.addStatic(MGet, path, file)
 }
 
-type SseConfig struct {
-	Datach    chan interface{} // needed
-	Closech   chan struct{}    // needed
-	EventName string           // optional
-	Timeout   time.Duration    // optional
+// // see config
+// type SseConfig struct {
+// 	Datach  chan interface{} // needed
+// 	Closech chan struct{}    // needed
+// 	Timeout time.Duration    // optional
+// }
+
+// sse event
+type SseEvent struct {
+	Name string // event name
+	Data string // event datas
 }
 
-func (gs *GoSvelt) Sse(path string, datach chan interface{}, closech chan struct{}, eventName string, fn func()) {
+func (gs *GoSvelt) Sse(path string, datach chan interface{}, closech chan struct{}, fn func()) {
 	handler := func(c *fasthttp.RequestCtx) {
 		// cors headers
 		//c.Response.Header.Add("Access-Control-Allow-Origin", "*")
@@ -249,28 +255,26 @@ func (gs *GoSvelt) Sse(path string, datach chan interface{}, closech chan struct
 						}
 					}
 
-					fmt.Printf("sse: write event %s\n", eventName)
-					fmt.Fprintf(w, "event: %s\n\n", eventName)
-					flush()
-
-				Loop:
+					//Loop:
 					for {
 						select {
 						case <-closech:
-							if datach != nil {
-								for range datach {
-								}
-								close(datach)
-							}
+							close(datach)
 
-							break Loop
+							//c.Res().Header.SetConnectionClose()
+
+							return
 
 						case msg := <-datach:
 							switch m := msg.(type) {
 							case string:
 								fmt.Fprintf(w, "data: %s\n\n", m)
 
-							case any: // we don't care
+							case SseEvent:
+								fmt.Fprintf(w, "event: %s\n\n", m.Name)
+								fmt.Fprintf(w, "data: %s\n\n", m.Data)
+
+							default: // we don't care
 								fmt.Fprintf(w, "data: %s\n\n", m)
 							}
 

@@ -38,7 +38,7 @@ func main() {
 
 	datach := make(chan interface{})
 	closech := make(chan struct{})
-	r.Sse("/test/sse", datach, closech, "test", func() {
+	r.Sse("/test/sse", datach, closech, func() {
 		datach <- "hello"
 
 		for i := 0; i < 4; i++ {
@@ -57,10 +57,10 @@ func main() {
 			datach <- "hello world"
 
 			for i := 0; i < 2; i++ {
-				time.Sleep(2 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 				datach <- gs.SseEvent{
 					Name: "date",
-					Data: fmt.Sprintf("%d -> actual time is %v", i, time.Now()),
+					Data: fmt.Sprintf("time: %v", time.Now()),
 				}
 			}
 
@@ -68,10 +68,7 @@ func main() {
 		})
 	})
 
-	r.AdvancedSvelte(
-		"/ssepage",
-		"cmd/static/",
-		"sse/App.svelte",
+	r.AdvancedSvelte("/ssepage", "cmd/static/", "sse/App.svelte",
 		func(c *gs.Context, svelte gs.Map) error {
 			return c.Html(200, "./cmd/static/index.html", svelte)
 		},
@@ -82,14 +79,15 @@ func main() {
 		},
 	)
 
-	// r.AdvancedSvelte("/", "cmd/static/", "app/App.svelte", func(c *gs.Context, svelte gs.Map) error {
-	// 	return c.Html(200, "./cmd/static/index.html", svelte)
-
-	// }, gs.SvelteConfig{
-	// 	Typescript:  false,
-	// 	Tailwindcss: true,
-	// 	Pnpm:        true,
-	// })
+	r.AdvancedSvelte("/", "cmd/static/", "app/App.svelte",
+		func(c *gs.Context, svelte gs.Map) error {
+			return c.Html(200, "./cmd/static/index.html", svelte)
+		},
+		gs.SvelteConfig{
+			Typescript:  false,
+			Tailwindcss: true,
+			Pnpm:        true,
+		})
 
 	r.Start(":8080")
 }
