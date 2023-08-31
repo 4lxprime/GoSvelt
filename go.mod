@@ -8,7 +8,7 @@ require (
 	github.com/fasthttp/websocket v1.5.4
 	github.com/go-git/go-git/v5 v5.8.1
 	github.com/otiai10/copy v1.12.0
-	github.com/valyala/fasthttp v1.49.0
+	github.com/valyala/fasthttp v1.48.0
 	google.golang.org/protobuf v1.31.0
 )
 

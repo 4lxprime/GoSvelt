@@ -9,7 +9,10 @@ import (
 )
 
 func main() {
-	r := gs.New()
+	r := gs.New(&gs.Config{
+		Log:   true,
+		Http2: false,
+	})
 
 	r.SvelteMiddleware("/", func(next gs.SvelteHandlerFunc) gs.SvelteHandlerFunc {
 		return func(c *gs.Context, svelte gs.Map) error {

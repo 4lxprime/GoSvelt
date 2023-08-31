@@ -26,6 +26,7 @@ func main() {
 ```
 ### cool way to made sse
 ```golang
+func main() {
 	r := gosvelt.New()
 
 	r.Get("/sse", func(c *gs.Context) error {
@@ -59,6 +60,7 @@ func main() {
 	})
 
 	r.Start(":80")
+}
 ```
 ### pretty simple syntax
 ```golang
@@ -91,3 +93,4 @@ func main() {
  - [x] **SSE** (Server Sent Events)
  - [x] **WS** (Web Socket)
  - [x] **CSS Engine** (Tailwindcss)
+ - [ ] Add layout system
