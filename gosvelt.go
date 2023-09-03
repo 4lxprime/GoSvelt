@@ -379,7 +379,7 @@ func (gs *GoSvelt) newFrontHandler(h SvelteHandlerFunc, svelte Map) fasthttp.Req
 		// middlewares
 		if len(gs.svelteMiddlewares) != 0 {
 			for p, mid := range gs.svelteMiddlewares {
-				if p == ctx.Path() || p == "*" {
+				if strings.HasPrefix(ctx.Path(), p) || p == "*" {
 					mid(h)
 				}
 			}
@@ -411,7 +411,7 @@ func (gs *GoSvelt) newHandler(h HandlerFunc) fasthttp.RequestHandler {
 		// middlewares
 		if len(gs.middlewares) != 0 {
 			for p, mid := range gs.middlewares {
-				if p == ctx.Path() {
+				if strings.HasPrefix(ctx.Path(), p) || p == "*" {
 					mid(h)
 				}
 			}
