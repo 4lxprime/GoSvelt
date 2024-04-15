@@ -1,17 +1,36 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	gs "github.com/4lxprime/GoSvelt"
 	"github.com/fasthttp/websocket"
+	"github.com/valyala/fasthttp"
 )
 
 func main() {
 	r := gs.New(&gs.Config{
 		Log:   true,
 		Http2: false,
+		ErrorHandler: func(c *fasthttp.RequestCtx, err error) {
+			statusCode := 500
+
+			respBytes, err := json.Marshal(struct {
+				Status int    `json:"status"`
+				Error  string `json:"error"`
+			}{
+				Status: statusCode,
+				Error:  err.Error(),
+			})
+			if err != nil {
+				return
+			}
+
+			c.SetBody(respBytes)
+			c.SetStatusCode(statusCode)
+		},
 	})
 
 	r.SvelteMiddleware("/", func(next gs.SvelteHandlerFunc) gs.SvelteHandlerFunc {
@@ -24,9 +43,7 @@ func main() {
 		return c.Json(200, gs.Map{"gg": c.Param("name")})
 	})
 
-	r.Get("/test", func(c *gs.Context) error {
-		return c.Text(200, "Hello, World!")
-	})
+	r.Get("/test", gs.String("Hello, World!"))
 
 	r.Get("/ws", func(c *gs.Context) error {
 		return c.Ws(func(conn *websocket.Conn) {
@@ -34,7 +51,7 @@ func main() {
 		})
 	})
 
-	r.Static("/svelte_logo", "./cmd/static/svelte_logo.svg")
+	r.Static("/svelte_logo", "static/svelte_logo.svg")
 
 	datach := make(chan interface{})
 	closech := make(chan struct{})
@@ -56,8 +73,8 @@ func main() {
 		return c.Sse(datach, closech, func() {
 			datach <- "hello world"
 
-			for i := 0; i < 2; i++ {
-				time.Sleep(100 * time.Millisecond)
+			for i := 0; i < 6; i++ {
+				time.Sleep(200 * time.Millisecond)
 				datach <- gs.SseEvent{
 					Name: "date",
 					Data: fmt.Sprintf("time: %v", time.Now()),
@@ -68,23 +85,20 @@ func main() {
 		})
 	})
 
-	r.AdvancedSvelte("/ssepage", "cmd/static/", "sse/App.svelte",
+	r.AdvancedSvelte("/ssepage", "static/", "sse/App.svelte",
 		func(c *gs.Context, svelte gs.Map) error {
-			return c.Html(200, "./cmd/static/index.html", svelte)
+			return c.Html(200, "static/index.html", svelte)
 		},
 		gs.SvelteConfig{
-			Typescript:  false,
-			Tailwindcss: false,
-			Pnpm:        true,
+			Pnpm: true,
 		},
 	)
 
-	r.AdvancedSvelte("/", "cmd/static/", "app/App.svelte",
+	r.AdvancedSvelte("/", "static/", "app/App.svelte",
 		func(c *gs.Context, svelte gs.Map) error {
-			return c.Html(200, "./cmd/static/index.html", svelte)
+			return c.Html(200, "static/index.html", svelte)
 		},
 		gs.SvelteConfig{
-			Typescript:  false,
 			Tailwindcss: true,
 			Pnpm:        true,
 		})

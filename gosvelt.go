@@ -3,7 +3,8 @@ package gosvelt
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -63,6 +64,7 @@ const (
 type Config struct {
 	Log            bool
 	Http2          bool
+	ErrorHandler   ErrorHandlerFunc
 	TailwindcssCfg string
 	PostcssCfg     string
 }
@@ -85,7 +87,7 @@ func (cfg *Config) init() *Config {
 			if err == nil {
 				defer file.Close()
 
-				content, err := ioutil.ReadAll(file)
+				content, err := io.ReadAll(file)
 				if err != nil {
 					panic(err)
 				}
@@ -102,7 +104,7 @@ func (cfg *Config) init() *Config {
 			if err == nil {
 				defer file.Close()
 
-				content, err := ioutil.ReadAll(file)
+				content, err := io.ReadAll(file)
 				if err != nil {
 					panic(err)
 				}
@@ -124,15 +126,26 @@ func New(cfg ...*Config) *GoSvelt {
 		storePool:         sync.Pool{},
 		middlewares:       make(map[string]MiddlewareFunc),
 		svelteMiddlewares: make(map[string]SvelteMiddlewareFunc),
-		errHandler:        defaultErrorHandler,
 	}
 
 	if len(cfg) != 0 {
 		gs.Config = cfg[0].init()
 	}
 
+	var errHandler ErrorHandlerFunc
+	if gs.Config.ErrorHandler == nil {
+		errHandler = defaultErrorHandler
+
+	} else {
+		errHandler = gs.Config.ErrorHandler
+	}
+
 	gs.router.NotFound = func(ctx *fasthttp.RequestCtx) {
-		gs.errHandler(ctx, fmt.Errorf("not found"))
+		err := fmt.Errorf(
+			http.StatusText(http.StatusNotFound),
+		)
+
+		errHandler(ctx, err)
 	}
 	gs.pool.New = gs.newContext
 	gs.storePool.New = func() interface{} { return make(Map) }
@@ -335,7 +348,7 @@ func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, cfg 
 	// compile svelte file to compFile
 	err := gs.compileSvelteFile(file, compFile, root, cfg...)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	// this is for the // in start of path

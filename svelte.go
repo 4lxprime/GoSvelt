@@ -136,7 +136,7 @@ func (gs *GoSvelt) newSvelteEnv(cfg SvelteConfig) error {
 // NOTE: theses functions can be slower because
 // they do not affect requests handling
 func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, cfg ...SvelteConfig) error {
-	config := SvelteConfig{}
+	var config SvelteConfig
 
 	if len(cfg) == 0 {
 		// set default config
@@ -145,6 +145,7 @@ func (gs *GoSvelt) compileSvelteFile(inFile, outFile, rootDir string, cfg ...Sve
 			Tailwindcss: false,
 			Pnpm:        false,
 		}
+
 	} else {
 		config = cfg[0]
 	}

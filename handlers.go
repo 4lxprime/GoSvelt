@@ -17,3 +17,22 @@ type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 type SvelteMiddlewareFunc func(next SvelteHandlerFunc) SvelteHandlerFunc
 type SvelteHandlerFunc func(c *Context, svelte Map) error
 type ErrorHandlerFunc func(c *fasthttp.RequestCtx, err error)
+
+func Status(code int) HandlerFunc {
+	return func(c *Context) error {
+		c.SetStatusCode(code)
+		return nil
+	}
+}
+
+func String(str string) HandlerFunc {
+	return func(c *Context) error {
+		return c.Text(200, str)
+	}
+}
+
+func Json(j interface{}) HandlerFunc {
+	return func(c *Context) error {
+		return c.Json(200, j)
+	}
+}
