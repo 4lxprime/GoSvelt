@@ -9,7 +9,7 @@ require (
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/otiai10/copy v1.14.0
 	github.com/valyala/fasthttp v1.48.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.34.0
 )
 
 require (
