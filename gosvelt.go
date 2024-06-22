@@ -3,7 +3,6 @@ package gosvelt
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -60,16 +59,17 @@ const (
 	MTextXmlUTF8   = MTextXML + "; " + CharsetUTF8       // xml text utf8
 )
 
-type Config struct {
-	Log            bool
-	Http2          bool
-	ErrorHandler   ErrorHandlerFunc
-	TailwindcssCfg string
-	PostcssCfg     string
+type Options struct {
+	log            bool
+	http2          bool
+	errorHandler   ErrorHandlerFunc
+	tailwindcssCfg *string
+	postcssCfg     *string
 }
+type Option func(*Options)
 
 type GoSvelt struct {
-	Config            *Config
+	config            *Options
 	server            *fasthttp.Server
 	router            *fasthttprouter.Router
 	pool              sync.Pool
@@ -79,46 +79,51 @@ type GoSvelt struct {
 	errHandler        ErrorHandlerFunc
 }
 
-func (cfg *Config) init() *Config {
-	if len(cfg.PostcssCfg) != 0 {
-		if !(filepath.Ext(cfg.PostcssCfg) == "") {
-			file, err := os.Open(cfg.PostcssCfg)
-			if err == nil {
-				defer file.Close()
-
-				content, err := io.ReadAll(file)
-				if err != nil {
-					panic(err)
-				}
-
-				cfg.PostcssCfg = string(content)
-
-			}
+var (
+	WithLog = func(o *Options) {
+		o.log = true
+	}
+	WithHttp2 = func(o *Options) {
+		o.http2 = true
+	}
+	WithErrorHandler = func(errorHandler ErrorHandlerFunc) Option {
+		return func(o *Options) {
+			o.errorHandler = errorHandler
 		}
 	}
-
-	if len(cfg.TailwindcssCfg) != 0 {
-		if !(filepath.Ext(cfg.TailwindcssCfg) == "") {
-			file, err := os.Open(cfg.TailwindcssCfg)
-			if err == nil {
-				defer file.Close()
-
-				content, err := io.ReadAll(file)
-				if err != nil {
-					panic(err)
-				}
-
-				cfg.TailwindcssCfg = string(content)
-			}
+	WithTailwind = func(tailwindConfig string) Option {
+		return func(o *Options) {
+			o.tailwindcssCfg = &tailwindConfig
 		}
 	}
+	WithPostcss = func(postcssConfig string) Option {
+		return func(o *Options) {
+			o.postcssCfg = &postcssConfig
+		}
+	}
+)
 
-	return cfg
+func initOptions(options []Option) *Options {
+	opts := &Options{
+		log:            false,
+		http2:          false,
+		errorHandler:   defaultErrorHandler,
+		tailwindcssCfg: nil,
+		postcssCfg:     nil,
+	}
+
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	return opts
 }
 
-func New(cfg ...*Config) *GoSvelt {
+func New(options ...Option) *GoSvelt {
+	opts := initOptions(options)
+
 	gs := &GoSvelt{
-		Config:            &Config{},
+		config:            opts,
 		server:            &fasthttp.Server{},
 		router:            fasthttprouter.New(),
 		pool:              sync.Pool{},
@@ -127,24 +132,12 @@ func New(cfg ...*Config) *GoSvelt {
 		svelteMiddlewares: make(map[string]SvelteMiddlewareFunc),
 	}
 
-	if len(cfg) != 0 {
-		gs.Config = cfg[0].init()
-	}
-
-	var errHandler ErrorHandlerFunc
-	if gs.Config.ErrorHandler == nil {
-		errHandler = defaultErrorHandler
-
-	} else {
-		errHandler = gs.Config.ErrorHandler
-	}
-
 	gs.router.NotFound = func(ctx *fasthttp.RequestCtx) {
 		err := fmt.Errorf(
 			http.StatusText(http.StatusNotFound),
 		)
 
-		errHandler(ctx, err)
+		opts.errorHandler(ctx, err)
 	}
 	gs.pool.New = gs.newContext
 	gs.storePool.New = func() interface{} { return make(Map) }
@@ -155,7 +148,7 @@ func New(cfg ...*Config) *GoSvelt {
 func (gs *GoSvelt) Start(addr string) {
 	gs.server.Handler = gs.router.Handler
 
-	if gs.Config.Http2 {
+	if gs.config.http2 {
 		http2.ConfigureServer(gs.server, http2.ServerConfig{})
 	}
 
@@ -176,7 +169,7 @@ func (gs *GoSvelt) Start(addr string) {
 func (gs *GoSvelt) StartTLS(addr, cert, key string) {
 	gs.server.Handler = gs.router.Handler
 
-	if gs.Config.Http2 {
+	if gs.config.http2 {
 		http2.ConfigureServer(gs.server, http2.ServerConfig{})
 	}
 

@@ -1,16 +1,18 @@
 # GoSvelt
- the `fasthttp` `fullstack` golang framwork using `svelte` (support tailwindcss).
- just more 10 time faster than `sveltekit`
+ The `fasthttp` `fullstack` golang framwork using `svelte` (support tailwindcss)
+ that use to be (blazingly) faster than default `sveltekit`
 
-## why gosvelt ?
-### fullstack integration of svelte
- yeah, gosvelt will compile, group, and serve svelte pages.  
- A Svelte or AdvancedSvelte handler will give you a **svelte map** wich contain "js" and "css" URLs and you can add to this map your own attributes that will be rendered on the html template (note: if you add for example a "test" element to the map, you have to add the `&{test}` element in the html template)
+## Why GoSvelt ?
+### Fullstack integration of Svelte
+ Yeah, gosvelt will compile, group, and serve svelte pages at runtime which is pretty cool.  
+ We are using the vitejs/vite svelte typescript compiler, with this, we can do likely everything we want, we could add few really interesting options.  
+ The "compiler" accept for the moment javascript / typescript svelte and tailwindcss, if you want some features to be added, i'll be happy to add them.  
+ A Svelte handler will give you a **svelte map** wich contain "js" and "css" URLs, you can add to this map your own attributes that will be rendered on the html template (Note: if you add for example a "test" element to the map, you have to add the `&{test}` element in the html template)
 ```golang
 func main() {
-	r := gosvelt.New()
+	app := gosvelt.New()
 
-	r.Svelte("/", "App.svelte",
+	app.Svelte("/", "App.svelte",
 		func(c *gs.Context, svelte gs.Map) error {
 			return c.Html(200, "assets/index.html", svelte)
 		},
@@ -19,62 +21,85 @@ func main() {
 		gs.WithRoot("views"),
 	)
 
-	r.Start(":80")
+	app.Start(":80")
 }
 ```
-### cool way to made sse
- there are actyally two way to use sse in gosvelt: the **context** way wich is in a context and can use channels declared in the handler. And the **handler** way wich is an handler function and use channels who are declared outside the handler.
+You can note that this could be faster (blazingly fast) than default sveltekit or default vite server as go is likely way faster than nodejs.  
+### Cool way to do SSE
+ There are actually two way to use sse in gosvelt:  
+ - The **context** way where you can instantiate your channels in the handler function and you can return a goroutine that will handle the sse stream.
+ - The **handler** way wich is a handler that will take outside channels (it could be really nice if you have some external struct for events handling) and instead of giving a handler function, you just give the goroutine function that will handle the sse stream.
 ```golang
 func main() {
-	r := gosvelt.New()
+	app := gosvelt.New()
 
-	r.Get("/sse", func(c *gs.Context) error { // context way
+	app.Get("/sse", func(c *gs.Context) error {
 		datach := make(chan interface{})
 		closech := make(chan struct{})
 
 		return c.Sse(datach, closech, func() {
-			datach <- "hello"
+			defer close(closech)
+			datach <- "hello world"
 
-			for i := 0; i < 10; i++ {
-				time.Sleep(100 * time.Millisecond)
-				datach <- fmt.Sprintf("%d -> actual time is %v", i, time.Now())
+			for i := 0; i < 6; i++ {
+				time.Sleep(200 * time.Millisecond)
+				datach <- gs.SseEvent{
+					Name: "date",
+					Data: fmt.Sprintf("time: %v", time.Now()),
+				}
 			}
-
-			close(closech)
 		})
 	})
 
-	r.Start(":80")
+	datach := make(chan interface{})
+	closech := make(chan struct{})
+
+	app.Sse("/ssetoo", datach, closech, func() {
+		defer close(closech)
+		datach <- "hello world"
+
+		for i := 0; i < 6; i++ {
+			time.Sleep(200 * time.Millisecond)
+			datach <- gs.SseEvent{
+				Name: "date",
+				Data: fmt.Sprintf("time: %v", time.Now()),
+			}
+		}
+	})
+
+	app.Start(":80")
 }
 ```
-### pretty simple syntax
- the syntax is like popular framworks like fiber, gin, echo
+### Pretty simple syntax
+ The syntax is really easy to remember / use if you are beggining with golang framworks and if you already know all this (useless) framworking stuff, it's like most popular framworks (fiber, gin, echo, ...) so you won't be lost!
 ```golang
 func main() {
-	r := gosvelt.New()
+	app := gosvelt.New(
+		gs.WithHttp2,
+	)
 
-	r.Get("/gg/:name", func(c *gosvelt.Context) error { // url params
+	app.Get("/gg/:name", func(c *gosvelt.Context) error { // url params
 		return c.Json(200, gosvelt.Map{"gg": c.Param("name")})
 	})
 
-	r.Get("/ws", func(c *gosvelt.Context) error { // websocket handler
+	app.Get("/ws", func(c *gosvelt.Context) error { // websocket handler
 		return c.Ws(func(conn *websocket.Conn) {
 			conn.WriteJSON(gosvelt.Map{"ez": "pz"})
 		})
 	})
 
-	r.Static("/index", "assets/index.html") // static files
+	app.Static("/index", "assets/index.html") // static files
 
-	r.Svelte("/", "views/App.svelte", // svelte page handler (runtime compiled)
+	app.Svelte("/", "views/App.svelte", // svelte page handler (runtime compiled)
 		func(c *gs.Context, svelte gs.Map) error {
 			return c.Html(200, "assets/index.html", svelte)
 		},
 	)
 
-	r.Start(":80")
+	app.Start(":80")
 }
 ```
-## todo:
+## Todo:
  - [ ] error handler panic issue
  - [ ] new gosvelt config options
  - [ ] live reload
