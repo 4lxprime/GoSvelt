@@ -10,19 +10,14 @@
 func main() {
 	r := gosvelt.New()
 
-	r.Svelte("/", "./static/App.svelte", func(c *gosvelt.Context, svelte gosvelt.Map) error {
-		return c.Html(200, "./static/index.html", svelte) // html template
-	})
-
-	r.AdvancedSvelte("/adv", "./static/", "App.svelte", 
-	func(c *gosvelt.Context, svelte gosvelt.Map) error {
-		return c.Html(200, "./static/index.html", svelte) // html template
-	}, 
-	gs.SvelteConfig{
-		Typescript:  false,
-		Tailwindcss: true,
-		Pnpm:        true,
-	})
+	r.Svelte("/", "App.svelte",
+		func(c *gs.Context, svelte gs.Map) error {
+			return c.Html(200, "assets/index.html", svelte)
+		},
+		gs.WithPackageManager("pnpm"),
+		gs.WithTailwindcss,
+		gs.WithRoot("views"),
+	)
 
 	r.Start(":80")
 }
@@ -49,20 +44,6 @@ func main() {
 		})
 	})
 
-	datach := make(chan interface{})
-	closech := make(chan struct{})
-
-	r.Sse("/sse2", datach, closech, func() { // handler way
-		datach <- "hello"
-
-		for i := 0; i < 4; i++ {
-			time.Sleep(time.Second)
-			datach <- fmt.Sprintf("%d -> actual time is %v", i, time.Now())
-		}
-
-		close(closech)
-	})
-
 	r.Start(":80")
 }
 ```
@@ -82,17 +63,22 @@ func main() {
 		})
 	})
 
-	r.Static("/index", "./cmd/static/index.html") // static files
+	r.Static("/index", "assets/index.html") // static files
 
-	r.Svelte("/", "./cmd/static/App.svelte", 
-	func(c *gosvelt.Context, svelte gosvelt.Map) error { // svelte files
-		return c.Html(200, "./cmd/static/index.html", svelte)
-	})
+	r.Svelte("/", "views/App.svelte", // svelte page handler (runtime compiled)
+		func(c *gs.Context, svelte gs.Map) error {
+			return c.Html(200, "assets/index.html", svelte)
+		},
+	)
 
 	r.Start(":80")
 }
 ```
 ## todo:
+ - [ ] error handler panic issue
+ - [ ] new gosvelt config options
+ - [ ] live reload
+ - [ ] template and init util (with gitdl)
  - [x] **CSR** (Client Side Rendering)
  - [ ] **SSR** (Server Side Rendering)
  - [ ] **ISR** (Incremental Static Regeneration)

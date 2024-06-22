@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/buaazp/fasthttprouter"
 	"github.com/dgrr/http2"
@@ -306,74 +305,73 @@ func (gs *GoSvelt) Sse(path string, datach chan interface{}, closech chan struct
 }
 
 // help to server Svelte files to client
-func (gs *GoSvelt) Svelte(path, svelteFile string, fn SvelteHandlerFunc, cfg ...SvelteConfig) {
-	gs.addSvelte(path, svelteFile, "", fn, cfg...)
-}
-
-// help to server Svelte files to client
-func (gs *GoSvelt) AdvancedSvelte(path, svelteRoot, svelteFile string, fn SvelteHandlerFunc, cfg ...SvelteConfig) {
-	if svelteFile == "" {
-		panic(fmt.Errorf("file cannnot be empty"))
-	}
-
-	gs.addSvelte(path, svelteRoot, svelteFile, fn, cfg...)
+func (gs *GoSvelt) Svelte(
+	path, svelteFile string,
+	handlerFn SvelteHandlerFunc,
+	options ...SvelteOption,
+) {
+	gs.addSvelte(
+		path,       // url path
+		svelteFile, // svelte file
+		handlerFn,
+		options...,
+	)
 }
 
 func (gs *GoSvelt) add(method, path string, h HandlerFunc) {
 	gs.router.Handle(method, path, gs.newHandler(h))
 }
 
-func (gs *GoSvelt) addSvelte(path, root, file string, fh SvelteHandlerFunc, cfg ...SvelteConfig) {
-	rand.Seed(time.Now().UnixNano())
-
-	// component name generated at random
-	compName := strings.ToLower(fmt.Sprintf("%x", rand.Uint32()))
-	for len(compName) < 8 {
-		compName += strings.ToLower(fmt.Sprintf("%x", rand.Uint32()))
-	}
-
-	// component folder path
-	compFolder := svelteWorkdir + "/" + compName
-	// component file path without ext
-	compFile := svelteWorkdir + "/" + compName + "/bundle"
-
-	// create component folder is not exist
-	if _, err := os.Stat(compFolder); os.IsNotExist(err) {
-		err := os.MkdirAll(compFolder, 0755)
-		if err != nil {
-			panic(err)
-		}
-	}
-
+func (gs *GoSvelt) addSvelte(
+	path,
+	svelteFile string,
+	handlerFn SvelteHandlerFunc,
+	options ...SvelteOption,
+) {
 	// compile svelte file to compFile
-	err := gs.compileSvelteFile(file, compFile, root, cfg...)
+	buildId, buildFolder, err := BuildSvelte(
+		svelteFile,
+		options...,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// this is for the // in start of path
-	// gpath is the good path
-	var gpath string
-	if string(path[len(path)-1]) == "/" {
-		gpath = path[:len(path)-1]
+	jsBundleUrl, err := url.JoinPath(path, buildId, "bundle.js")
+	if err != nil {
+		panic(err)
+	}
 
-	} else {
-		gpath = path
+	cssBundleUrl, err := url.JoinPath(path, buildId, "bundle.css")
+	if err != nil {
+		panic(err)
 	}
 
 	// this map gives the js and css path
 	svelteMap := Map{
-		"js":  gpath + "/bundle/bundle.js",
-		"css": gpath + "/bundle/bundle.css",
+		"js":  jsBundleUrl,
+		"css": cssBundleUrl,
 	}
 
 	// this will handle the main route
-	gs.router.Handle(MGet, path, gs.newFrontHandler(fh, svelteMap))
+	gs.router.Handle(
+		MGet,
+		path,
+		gs.newFrontHandler(handlerFn, svelteMap),
+	)
 
 	// this will handle the js bundle file
-	gs.addStatic(MGet, svelteMap["js"].(string), compFile+".js")
+	gs.addStatic(
+		MGet,
+		svelteMap["js"].(string),
+		filepath.Join(buildFolder, "bundle.js"),
+	)
 	// this will handle the css bundle file
-	gs.addStatic(MGet, svelteMap["css"].(string), compFile+".css")
+	gs.addStatic(
+		MGet,
+		svelteMap["css"].(string),
+		filepath.Join(buildFolder, "bundle.css"),
+	)
 }
 
 func (gs *GoSvelt) addStatic(method, path, file string) {
@@ -382,32 +380,31 @@ func (gs *GoSvelt) addStatic(method, path, file string) {
 
 // this create an fasthttp handler
 // with an front handler and an svelte path
-func (gs *GoSvelt) newFrontHandler(h SvelteHandlerFunc, svelte Map) fasthttp.RequestHandler {
+func (gs *GoSvelt) newFrontHandler(handlerFn SvelteHandlerFunc, svelte Map) fasthttp.RequestHandler {
 	return func(bctx *fasthttp.RequestCtx) {
+		ctx := gs.pool.Get().(*Context) // get context from the pool
+
 		// make an new context for fonction
 		// using fasthttp request context
-		ctx := gs.pool.Get().(*Context)
 		ctx.update(bctx)
+
+		defer ctx.reset()      // reset the context with nil values
+		defer gs.pool.Put(ctx) // put the context back in the pool after the reset
 
 		// middlewares
 		if len(gs.svelteMiddlewares) != 0 {
-			for p, mid := range gs.svelteMiddlewares {
-				if strings.HasPrefix(ctx.Path(), p) || p == "*" {
-					mid(h)
+			for path, mid := range gs.svelteMiddlewares {
+				if strings.HasPrefix(ctx.Path(), path) || path == "*" {
+					mid(handlerFn)
 				}
 			}
 		}
 
 		// if there are no errors handle the req
 		// else use the default error handler
-		if err := h(ctx, svelte); err != nil {
+		if err := handlerFn(ctx, svelte); err != nil {
 			gs.errHandler(bctx, err)
 		}
-
-		// reset the context with nil values
-		// and put it in the pool
-		ctx.reset()
-		gs.pool.Put(ctx)
 	}
 }
 

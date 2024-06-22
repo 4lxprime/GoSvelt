@@ -1,9 +1,13 @@
 package gosvelt
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	cp "github.com/otiai10/copy"
@@ -18,6 +22,14 @@ func copyFile(inFile, outFile string) error {
 		return err
 	}
 	defer file.Close()
+
+	// writing full path
+	outFileDir := filepath.Dir(outFile)
+	if _, err := os.Stat(outFileDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(outFileDir, 0755); err != nil {
+			return err
+		}
+	}
 
 	newFile, err := os.Create(outFile)
 	if err != nil {
@@ -63,25 +75,6 @@ func cleanDir(dir string) error {
 	return os.MkdirAll(dir, 0755)
 }
 
-// get the file of an path
-// like:
-// /path/to/filename.svelte -> filename.svelte
-func file(file string) string {
-	fileS := strings.Split(file, "/")
-
-	return fileS[len(fileS)-1]
-}
-
-// get the filename of an path
-// like:
-// /path/to/filename.svelte -> filename
-func fileName(file string) string {
-	fileS := strings.Split(file, "/")
-	fileF := fileS[len(fileS)-1]
-
-	return strings.Split(fileF, ".")[0]
-}
-
 // This method takes a file path as input
 // and returns a boolean value indicating whether
 // the path represents a file or not, as well
@@ -95,8 +88,8 @@ func isFile(path string) (bool, error) {
 	return !fi.IsDir(), nil
 }
 
-// this will check if path exist
-func exist(path string) bool {
+// this will check if path fileExists
+func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
 }
@@ -113,4 +106,50 @@ func temporaryText(textChan chan struct{}, msg string) {
 		}
 		fmt.Print("\r")
 	}
+}
+
+func calculateFileHash(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+}
+
+func calculateTreeHash(root string) (string, error) {
+	var fileHashes []string
+
+	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !d.IsDir() {
+			hash, err := calculateFileHash(path)
+			if err != nil {
+				return err
+			}
+			fileHashes = append(fileHashes, hash)
+		}
+
+		return nil
+	}); err != nil {
+		return "", err
+	}
+
+	sort.Strings(fileHashes)
+	hasher := sha256.New()
+
+	if _, err := hasher.Write([]byte(strings.Join(fileHashes, ""))); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }

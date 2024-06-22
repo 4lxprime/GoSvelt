@@ -6,7 +6,6 @@ import (
 	"time"
 
 	gs "github.com/4lxprime/GoSvelt"
-	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
 )
 
@@ -39,32 +38,7 @@ func main() {
 		}
 	})
 
-	r.Get("/gg/:name", func(c *gs.Context) error {
-		return c.Json(200, gs.Map{"gg": c.Param("name")})
-	})
-
-	r.Get("/test", gs.String("Hello, World!"))
-
-	r.Get("/ws", func(c *gs.Context) error {
-		return c.Ws(func(conn *websocket.Conn) {
-			conn.WriteJSON(gs.Map{"ez": "pz"})
-		})
-	})
-
-	r.Static("/svelte_logo", "static/svelte_logo.svg")
-
-	datach := make(chan interface{})
-	closech := make(chan struct{})
-	r.Sse("/test/sse", datach, closech, func() {
-		datach <- "hello"
-
-		for i := 0; i < 4; i++ {
-			time.Sleep(time.Second)
-			datach <- fmt.Sprintf("%d -> actual time is %v", i, time.Now())
-		}
-
-		close(closech)
-	})
+	r.Static("/svelte_logo", "assets/svelte_logo.svg")
 
 	r.Get("/sse", func(c *gs.Context) error {
 		datach := make(chan interface{})
@@ -85,23 +59,21 @@ func main() {
 		})
 	})
 
-	r.AdvancedSvelte("/ssepage", "static/", "sse/App.svelte",
+	r.Svelte("/ssepage", "views/sse/App.svelte",
 		func(c *gs.Context, svelte gs.Map) error {
-			return c.Html(200, "static/index.html", svelte)
+			return c.Html(200, "assets/index.html", svelte)
 		},
-		gs.SvelteConfig{
-			Pnpm: true,
-		},
+		gs.WithPackageManager("pnpm"),
 	)
 
-	r.AdvancedSvelte("/", "static/", "app/App.svelte",
+	r.Svelte("/", "App.svelte",
 		func(c *gs.Context, svelte gs.Map) error {
-			return c.Html(200, "static/index.html", svelte)
+			return c.Html(200, "assets/index.html", svelte)
 		},
-		gs.SvelteConfig{
-			Tailwindcss: true,
-			Pnpm:        true,
-		})
+		gs.WithPackageManager("pnpm"),
+		gs.WithTailwindcss,
+		gs.WithRoot("views"),
+	)
 
 	r.Start(":8080")
 }

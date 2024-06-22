@@ -1,6 +1,6 @@
 module github.com/4lxprime/GoSvelt
 
-go 1.20
+go 1.22.2
 
 require (
 	github.com/buaazp/fasthttprouter v0.1.1
@@ -14,6 +14,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	github.com/4lxprime/gitdl v0.0.0-20240620095131-2e04094de04a // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230828082145-3c4c8a2d2371 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
@@ -27,6 +28,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/pjbgf/sha1cd v0.3.0 // indirect
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
 	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
 	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/skeema/knownhosts v1.2.1 // indirect

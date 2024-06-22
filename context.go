@@ -34,12 +34,18 @@ func (gs *GoSvelt) newContext() any {
 }
 
 func (c *Context) update(ctx *fasthttp.RequestCtx) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	c.Ctx = context.Background()
 	c.fasthttpCtx = ctx
 	c.store = make(Map)
 }
 
 func (c *Context) reset() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	c.fasthttpCtx = nil
 	c.store = nil
 }
